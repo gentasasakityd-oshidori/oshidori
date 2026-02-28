@@ -27,6 +27,12 @@ export interface EngagementContext {
   covered_topics: string[];
 }
 
+export interface StructuredTags {
+  kodawari: string[];
+  personality: string[];
+  scene: string[];
+}
+
 export interface StoryOutput {
   title: string;
   body: string;
@@ -34,6 +40,7 @@ export interface StoryOutput {
   key_quotes: string[];
   emotion_tags: string[];
   story_themes: Record<string, number>;
+  structured_tags: StructuredTags;
 }
 
 export interface MenuOutput {

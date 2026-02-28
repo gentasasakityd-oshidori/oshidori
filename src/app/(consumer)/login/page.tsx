@@ -4,7 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState, Suspense } from "react";
-import { Mail, Lock, User, Eye, EyeOff, Loader2, AlertCircle } from "lucide-react";
+import { Mail, Lock, User, Eye, EyeOff, Loader2, AlertCircle, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -21,6 +21,7 @@ function LoginForm() {
   const [error, setError] = useState<string | null>(
     searchParams.get("error") === "auth" ? "認証に失敗しました。もう一度お試しください。" : null
   );
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   // ログインフォーム
   const [loginEmail, setLoginEmail] = useState("");
@@ -99,7 +100,14 @@ function LoginForm() {
         return;
       }
 
-      // Supabaseの設定によってはメール確認不要で即ログイン
+      // メール確認が必要な場合は成功メッセージを表示
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        setSuccessMessage("確認メールを送信しました。メール内のリンクをクリックして登録を完了してください。");
+        return;
+      }
+
+      // メール確認不要の場合は即ログイン
       router.push("/");
       router.refresh();
     } catch {
@@ -142,6 +150,14 @@ function LoginForm() {
 
         <Card className="border-border/60 shadow-lg">
           <CardContent className="p-6">
+            {/* 成功メッセージ表示 */}
+            {successMessage && (
+              <div className="mb-4 flex items-start gap-2 rounded-md bg-green-50 p-3 text-sm text-green-700">
+                <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
+                <span>{successMessage}</span>
+              </div>
+            )}
+
             {/* エラー表示 */}
             {error && (
               <div className="mb-4 flex items-start gap-2 rounded-md bg-destructive/10 p-3 text-sm text-destructive">

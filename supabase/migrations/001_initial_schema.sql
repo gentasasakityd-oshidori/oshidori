@@ -173,6 +173,81 @@ create table photo_requests (
 create index idx_photo_requests_shop_id on photo_requests(shop_id);
 
 -- ============================================
+-- 10. shop_messages（店主→ファン限定メッセージ）── v2追加
+-- ============================================
+create table shop_messages (
+  id uuid primary key default gen_random_uuid(),
+  shop_id uuid not null references shops(id) on delete cascade,
+  title text not null,
+  content text not null,
+  target text not null default 'all_fans', -- 'all_fans' | 'specific_fans'
+  sent_at timestamptz,
+  read_count integer default 0,
+  open_rate real default 0,
+  created_at timestamptz default now()
+);
+
+create index idx_shop_messages_shop_id on shop_messages(shop_id);
+create index idx_shop_messages_sent_at on shop_messages(sent_at);
+
+-- ============================================
+-- 11. message_reads（メッセージ既読管理）── v2追加
+-- ============================================
+create table message_reads (
+  id uuid primary key default gen_random_uuid(),
+  message_id uuid not null references shop_messages(id) on delete cascade,
+  user_id uuid not null references users(id) on delete cascade,
+  read_at timestamptz default now(),
+  unique(message_id, user_id)
+);
+
+create index idx_message_reads_message_id on message_reads(message_id);
+create index idx_message_reads_user_id on message_reads(user_id);
+
+-- ============================================
+-- 12. shop_structured_tags（構造化タグ）── v2.2追加
+-- ============================================
+create table shop_structured_tags (
+  id uuid primary key default gen_random_uuid(),
+  shop_id uuid not null references shops(id) on delete cascade,
+  tag_category text not null, -- 'kodawari' | 'personality' | 'scene' | 'genre' | 'budget'
+  tag_value text not null,
+  confidence_score real default 0.8,
+  source text not null default 'ai_interview', -- 'ai_interview' | 'fan_emotion' | 'manual'
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+create index idx_shop_structured_tags_shop_id on shop_structured_tags(shop_id);
+create index idx_shop_structured_tags_category on shop_structured_tags(tag_category);
+create index idx_shop_structured_tags_source on shop_structured_tags(source);
+
+-- ============================================
+-- 13. shop_basic_info（基本検索情報）── v2.2追加
+-- ============================================
+create table shop_basic_info (
+  id uuid primary key default gen_random_uuid(),
+  shop_id uuid unique not null references shops(id) on delete cascade,
+  nearest_station text,
+  latitude real,
+  longitude real,
+  budget_lunch_min integer,
+  budget_lunch_max integer,
+  budget_dinner_min integer,
+  budget_dinner_max integer,
+  budget_label_lunch text, -- 感情ベースラベル
+  budget_label_dinner text, -- 感情ベースラベル
+  genre_primary text,
+  genre_secondary text,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+create index idx_shop_basic_info_shop_id on shop_basic_info(shop_id);
+create index idx_shop_basic_info_genre on shop_basic_info(genre_primary);
+create index idx_shop_basic_info_station on shop_basic_info(nearest_station);
+
+-- ============================================
 -- RLS（Row Level Security）
 -- ============================================
 alter table shops enable row level security;
@@ -233,6 +308,28 @@ create policy "インタビューメッセージは閲覧可" on interview_messa
 create policy "撮影リクエストは閲覧可" on photo_requests
   for select using (true);
 
+-- shop_messages: RLS
+alter table shop_messages enable row level security;
+create policy "ファンはメッセージを閲覧可" on shop_messages
+  for select using (sent_at is not null);
+
+-- message_reads: RLS
+alter table message_reads enable row level security;
+create policy "自分の既読状態を閲覧可" on message_reads
+  for select using (auth.uid() = user_id);
+create policy "ログインユーザーは既読を記録可" on message_reads
+  for insert with check (auth.uid() = user_id);
+
+-- shop_structured_tags: RLS
+alter table shop_structured_tags enable row level security;
+create policy "構造化タグは誰でも閲覧可" on shop_structured_tags
+  for select using (true);
+
+-- shop_basic_info: RLS
+alter table shop_basic_info enable row level security;
+create policy "基本検索情報は誰でも閲覧可" on shop_basic_info
+  for select using (true);
+
 -- ============================================
 -- updated_at 自動更新トリガー
 -- ============================================
@@ -245,4 +342,10 @@ end;
 $$ language plpgsql;
 
 create trigger update_shops_updated_at before update on shops
+  for each row execute function update_updated_at();
+
+create trigger update_shop_structured_tags_updated_at before update on shop_structured_tags
+  for each row execute function update_updated_at();
+
+create trigger update_shop_basic_info_updated_at before update on shop_basic_info
   for each row execute function update_updated_at();

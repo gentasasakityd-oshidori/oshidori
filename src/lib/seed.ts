@@ -276,14 +276,20 @@ async function seed() {
 
   // 既存データを削除（依存関係の順で）
   console.log("既存データを削除中...");
-  await supabase.from("empathy_taps").delete().neq("id", "");
-  await supabase.from("oshi_shops").delete().neq("id", "");
-  await supabase.from("menus").delete().neq("id", "");
-  await supabase.from("stories").delete().neq("id", "");
-  await supabase.from("photo_requests").delete().neq("id", "");
-  await supabase.from("interview_messages").delete().neq("id", "");
-  await supabase.from("ai_interviews").delete().neq("id", "");
-  await supabase.from("shops").delete().neq("id", "");
+  // v2.2追加テーブル
+  await supabase.from("message_reads").delete().not("id", "is", null);
+  await supabase.from("shop_messages").delete().not("id", "is", null);
+  await supabase.from("shop_structured_tags").delete().not("id", "is", null);
+  await supabase.from("shop_basic_info").delete().not("id", "is", null);
+  // 既存テーブル
+  await supabase.from("empathy_taps").delete().not("id", "is", null);
+  await supabase.from("oshi_shops").delete().not("id", "is", null);
+  await supabase.from("menus").delete().not("id", "is", null);
+  await supabase.from("stories").delete().not("id", "is", null);
+  await supabase.from("photo_requests").delete().not("id", "is", null);
+  await supabase.from("interview_messages").delete().not("id", "is", null);
+  await supabase.from("ai_interviews").delete().not("id", "is", null);
+  await supabase.from("shops").delete().not("id", "is", null);
   console.log("✅ 既存データ削除完了\n");
 
   // shops を投入

@@ -306,6 +306,148 @@ export interface Database {
           created_at?: string;
         };
       };
+      // v2追加
+      shop_messages: {
+        Row: {
+          id: string;
+          shop_id: string;
+          title: string;
+          content: string;
+          target: string;
+          sent_at: string | null;
+          read_count: number;
+          open_rate: number;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          shop_id: string;
+          title: string;
+          content: string;
+          target?: string;
+          sent_at?: string | null;
+          read_count?: number;
+          open_rate?: number;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          shop_id?: string;
+          title?: string;
+          content?: string;
+          target?: string;
+          sent_at?: string | null;
+          read_count?: number;
+          open_rate?: number;
+          created_at?: string;
+        };
+      };
+      message_reads: {
+        Row: {
+          id: string;
+          message_id: string;
+          user_id: string;
+          read_at: string;
+        };
+        Insert: {
+          id?: string;
+          message_id: string;
+          user_id: string;
+          read_at?: string;
+        };
+        Update: {
+          id?: string;
+          message_id?: string;
+          user_id?: string;
+          read_at?: string;
+        };
+      };
+      // v2.2追加
+      shop_structured_tags: {
+        Row: {
+          id: string;
+          shop_id: string;
+          tag_category: string;
+          tag_value: string;
+          confidence_score: number;
+          source: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          shop_id: string;
+          tag_category: string;
+          tag_value: string;
+          confidence_score?: number;
+          source?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          shop_id?: string;
+          tag_category?: string;
+          tag_value?: string;
+          confidence_score?: number;
+          source?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
+      shop_basic_info: {
+        Row: {
+          id: string;
+          shop_id: string;
+          nearest_station: string | null;
+          latitude: number | null;
+          longitude: number | null;
+          budget_lunch_min: number | null;
+          budget_lunch_max: number | null;
+          budget_dinner_min: number | null;
+          budget_dinner_max: number | null;
+          budget_label_lunch: string | null;
+          budget_label_dinner: string | null;
+          genre_primary: string | null;
+          genre_secondary: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          shop_id: string;
+          nearest_station?: string | null;
+          latitude?: number | null;
+          longitude?: number | null;
+          budget_lunch_min?: number | null;
+          budget_lunch_max?: number | null;
+          budget_dinner_min?: number | null;
+          budget_dinner_max?: number | null;
+          budget_label_lunch?: string | null;
+          budget_label_dinner?: string | null;
+          genre_primary?: string | null;
+          genre_secondary?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          shop_id?: string;
+          nearest_station?: string | null;
+          latitude?: number | null;
+          longitude?: number | null;
+          budget_lunch_min?: number | null;
+          budget_lunch_max?: number | null;
+          budget_dinner_min?: number | null;
+          budget_dinner_max?: number | null;
+          budget_label_lunch?: string | null;
+          budget_label_dinner?: string | null;
+          genre_primary?: string | null;
+          genre_secondary?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;
@@ -323,10 +465,21 @@ export type EmpathyTap = Database["public"]["Tables"]["empathy_taps"]["Row"];
 export type AiInterview = Database["public"]["Tables"]["ai_interviews"]["Row"];
 export type InterviewMessage = Database["public"]["Tables"]["interview_messages"]["Row"];
 export type PhotoRequest = Database["public"]["Tables"]["photo_requests"]["Row"];
+export type ShopMessage = Database["public"]["Tables"]["shop_messages"]["Row"];
+export type MessageRead = Database["public"]["Tables"]["message_reads"]["Row"];
+export type ShopStructuredTag = Database["public"]["Tables"]["shop_structured_tags"]["Row"];
+export type ShopBasicInfo = Database["public"]["Tables"]["shop_basic_info"]["Row"];
+
+// タグカテゴリの型定義
+export type TagCategory = "kodawari" | "personality" | "scene" | "genre" | "budget";
+export type TagSource = "ai_interview" | "fan_emotion" | "manual";
+export type MessageTarget = "all_fans" | "specific_fans";
 
 // UI用の複合型（ダミーデータ・クエリ結果共通）
 export type ShopWithRelations = Shop & {
   stories: Story[];
   menus: Menu[];
   _count: { oshi: number; empathy: number };
+  basic_info?: ShopBasicInfo | null;
+  structured_tags?: ShopStructuredTag[];
 };

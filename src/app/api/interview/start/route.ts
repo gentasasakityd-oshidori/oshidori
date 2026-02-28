@@ -47,8 +47,9 @@ export async function POST(request: Request) {
       .single();
 
     if (interviewError || !interview) {
+      console.error("Interview create error:", interviewError);
       return NextResponse.json(
-        { error: "Failed to create interview" },
+        { error: "Failed to create interview", details: interviewError?.message ?? "no data" },
         { status: 500 }
       );
     }
@@ -78,10 +79,12 @@ export async function POST(request: Request) {
 
     const aiContent = completion.choices[0]?.message?.content ?? "";
 
-    // JSONパース（メタデータ抽出）
+    // JSONパース（メタデータ抽出） — ```json ブロックも対応
     let displayMessage = aiContent;
     try {
-      const parsed = JSON.parse(aiContent);
+      const jsonMatch = aiContent.match(/```(?:json)?\s*([\s\S]*?)```/);
+      const jsonStr = jsonMatch ? jsonMatch[1].trim() : aiContent.trim();
+      const parsed = JSON.parse(jsonStr);
       if (parsed.message) {
         displayMessage = parsed.message;
       }
@@ -107,8 +110,9 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     console.error("Interview start error:", error);
+    const errMsg = error instanceof Error ? error.message : String(error);
     return NextResponse.json(
-      { error: "Internal server error" },
+      { error: "Internal server error", details: errMsg },
       { status: 500 }
     );
   }
