@@ -1,5 +1,11 @@
 /** AIインタビュー関連の型定義 */
 
+export type InterviewType =
+  | "initial_interview"
+  | "monthly_update"
+  | "menu_addition"
+  | "seasonal_menu";
+
 export type InterviewPhase =
   | "warmup"
   | "origin"
@@ -9,11 +15,18 @@ export type InterviewPhase =
   | "future"
   | "completed";
 
+/** 月次アップデート・メニュー追加・季節限定用の短縮フェーズ */
+export type ShortInterviewPhase =
+  | "catchup"
+  | "episode"
+  | "closing"
+  | "completed";
+
 export interface InterviewMetadata {
-  phase: InterviewPhase;
+  phase: InterviewPhase | ShortInterviewPhase;
   phase_number: number;
   should_transition: boolean;
-  next_phase?: InterviewPhase;
+  next_phase?: InterviewPhase | ShortInterviewPhase;
   key_quote?: string;
   emotion_detected?: string;
 }
@@ -25,6 +38,7 @@ export interface EngagementContext {
   key_quotes: string[];
   emotion_tags: string[];
   covered_topics: string[];
+  high_empathy_topics?: { theme: string; score: number; sample_size: number }[];
 }
 
 export interface StructuredTags {

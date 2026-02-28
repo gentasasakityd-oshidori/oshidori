@@ -155,18 +155,21 @@ export interface Database {
           id: string;
           nickname: string;
           avatar_url: string | null;
+          is_admin: boolean;
           created_at: string;
         };
         Insert: {
           id: string;
           nickname: string;
           avatar_url?: string | null;
+          is_admin?: boolean;
           created_at?: string;
         };
         Update: {
           id?: string;
           nickname?: string;
           avatar_url?: string | null;
+          is_admin?: boolean;
           created_at?: string;
         };
       };

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { getOpenAIClient } from "@/lib/ai/client";
+import { logApiUsage, extractUsage } from "@/lib/ai/usage-logger";
 import { buildInterviewSystemPrompt } from "@/lib/prompts";
 import type { Shop } from "@/types/database";
 import type { InterviewMetadata } from "@/types/ai";
@@ -91,6 +92,15 @@ export async function POST(request: Request) {
     });
 
     const aiContent = completion.choices[0]?.message?.content ?? "";
+
+    // APIコスト記録
+    const usage = extractUsage(completion);
+    logApiUsage({
+      endpoint: "interview/message",
+      ...usage,
+      shopId: interviewData.shop_id,
+      interviewId: interview_id,
+    });
 
     // JSONパース（メタデータ抽出）
     let displayMessage = aiContent;

@@ -8,7 +8,7 @@ export function Footer() {
         <div className="grid gap-8 sm:grid-cols-3">
           {/* ブランド */}
           <div>
-            <Link href="/" className="inline-block">
+            <Link href="/home" className="inline-block">
               <Image
                 src="/logo.png"
                 alt="オシドリ"

@@ -5,6 +5,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { getPublishedShops } from "@/lib/queries";
 import { AREAS } from "@/lib/constants";
+import { SearchBar } from "@/components/search-bar";
 
 export default async function HomePage() {
   const shops = await getPublishedShops();
@@ -29,14 +30,7 @@ export default async function HomePage() {
           </p>
           {/* 検索エリア */}
           <div className="mt-5">
-            <Link
-              href="/explore"
-              className="flex items-center gap-3 rounded-lg border border-border bg-background px-4 py-3 text-sm text-muted-foreground transition-colors hover:border-primary"
-            >
-              <Search className="h-4 w-4" />
-              店名、エリア、ジャンルで探す...
-              <ArrowRight className="ml-auto h-4 w-4" />
-            </Link>
+            <SearchBar />
           </div>
           {/* エリアタグ（横スクロール） */}
           <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
@@ -193,9 +187,9 @@ export default async function HomePage() {
               <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
                 <Sparkles className="h-6 w-6 text-primary" />
               </div>
-              <h3 className="mt-3 font-semibold">AIが引き出す物語</h3>
+              <h3 className="mt-3 font-semibold">店主の想いを物語に</h3>
               <p className="mt-1 text-sm text-muted-foreground">
-                店主との対話から、お店の魅力を自動で言語化
+                店主との対話から、お店の魅力をストーリーに
               </p>
             </div>
             <div className="text-center">
@@ -225,7 +219,7 @@ export default async function HomePage() {
         <div className="mx-auto max-w-3xl text-center">
           <h2 className="text-2xl font-bold">飲食店オーナーの方へ</h2>
           <p className="mt-3 text-sm opacity-90">
-            AIがあなたの&quot;こだわり&quot;を引き出し、プロ品質のストーリーに。
+            あなたの&quot;こだわり&quot;を引き出し、プロ品質のストーリーに。
             <br />
             発信が苦手でも大丈夫。1時間の対話だけで、お店の魅力が伝わります。
           </p>

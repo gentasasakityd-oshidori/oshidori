@@ -1,25 +1,43 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, Suspense } from "react";
 import Link from "next/link";
+import { useSearchParams, useRouter } from "next/navigation";
 import { Search, Heart, MessageCircle, SlidersHorizontal, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet";
-import { AREAS, CATEGORIES } from "@/lib/constants";
+import { AREAS, CATEGORIES, BUDGET_LABELS } from "@/lib/constants";
+import type { BudgetLabelId } from "@/lib/constants";
 import { DUMMY_SHOPS } from "@/lib/dummy-data";
 import type { ShopWithRelations, Shop, Story, Menu } from "@/types/database";
 import { createClient } from "@/lib/supabase/client";
 
-export default function ExplorePage() {
-  const [query, setQuery] = useState("");
-  const [selectedArea, setSelectedArea] = useState<string | null>(null);
+function ExploreContent() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+
+  // URLパラメータから初期値を取得
+  const initialQuery = searchParams.get("q") ?? "";
+  const initialArea = searchParams.get("area");
+
+  const [query, setQuery] = useState(initialQuery);
+  const [selectedArea, setSelectedArea] = useState<string | null>(initialArea);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [selectedBudget, setSelectedBudget] = useState<BudgetLabelId | null>(null);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [shops, setShops] = useState<ShopWithRelations[]>(DUMMY_SHOPS);
   const [isLoaded, setIsLoaded] = useState(false);
+
+  // URLパラメータが変わったら状態を更新
+  useEffect(() => {
+    const q = searchParams.get("q") ?? "";
+    const area = searchParams.get("area");
+    setQuery(q);
+    setSelectedArea(area);
+  }, [searchParams]);
 
   // Supabaseからデータを取得
   useEffect(() => {
@@ -98,23 +116,66 @@ export default function ExplorePage() {
       const matchesArea = !selectedArea || shop.area === selectedArea;
       const matchesCategory =
         !selectedCategory || shop.category === selectedCategory;
-      return matchesQuery && matchesArea && matchesCategory;
+
+      // 予算帯フィルター：メニュー価格から判定
+      let matchesBudget = true;
+      if (selectedBudget) {
+        const budgetDef = BUDGET_LABELS.find((b) => b.id === selectedBudget);
+        if (budgetDef && shop.menus.length > 0) {
+          // 店舗のメニュー平均価格で判定
+          const prices = shop.menus
+            .map((m) => m.price)
+            .filter((p): p is number => typeof p === "number" && p > 0);
+          if (prices.length > 0) {
+            const avgPrice = prices.reduce((a, b) => a + b, 0) / prices.length;
+            matchesBudget =
+              avgPrice >= budgetDef.min &&
+              (budgetDef.max === null || avgPrice <= budgetDef.max);
+          }
+          // 価格情報がないメニューのみの場合はフィルターしない
+        }
+        // メニューがない店舗はフィルターしない（まだデータ不足）
+      }
+
+      return matchesQuery && matchesArea && matchesCategory && matchesBudget;
     });
-  }, [query, selectedArea, selectedCategory, shops]);
+  }, [query, selectedArea, selectedCategory, selectedBudget, shops]);
 
   const activeFilterCount =
-    (selectedArea ? 1 : 0) + (selectedCategory ? 1 : 0);
+    (selectedArea ? 1 : 0) + (selectedCategory ? 1 : 0) + (selectedBudget ? 1 : 0);
+
+  // URLパラメータを更新するユーティリティ
+  function updateURL(newQuery: string, newArea: string | null) {
+    const params = new URLSearchParams();
+    if (newQuery) params.set("q", newQuery);
+    if (newArea) params.set("area", newArea);
+    const qs = params.toString();
+    router.replace(`/explore${qs ? `?${qs}` : ""}`, { scroll: false });
+  }
 
   function clearFilters() {
     setSelectedArea(null);
     setSelectedCategory(null);
+    setSelectedBudget(null);
     setQuery("");
+    router.replace("/explore", { scroll: false });
+  }
+
+  function handleAreaChange(area: string) {
+    const newArea = selectedArea === area ? null : area;
+    setSelectedArea(newArea);
+    updateURL(query, newArea);
+  }
+
+  function handleSearchSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    updateURL(query, selectedArea);
   }
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-6">
       {/* 検索バー */}
-      <div className="flex gap-2">
+      <form className="flex gap-2" onSubmit={handleSearchSubmit}>
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
@@ -145,9 +206,7 @@ export default function ExplorePage() {
                   {AREAS.map((area) => (
                     <button
                       key={area}
-                      onClick={() =>
-                        setSelectedArea(selectedArea === area ? null : area)
-                      }
+                      onClick={() => handleAreaChange(area)}
                       className={`rounded-full border px-3 py-1 text-xs transition-colors ${
                         selectedArea === area
                           ? "border-primary bg-primary text-primary-foreground"
@@ -182,6 +241,32 @@ export default function ExplorePage() {
                   ))}
                 </div>
               </div>
+              {/* 予算帯 */}
+              <div>
+                <h3 className="mb-2 text-sm font-semibold">予算帯</h3>
+                <div className="flex flex-col gap-2">
+                  {BUDGET_LABELS.map((budget) => (
+                    <button
+                      key={budget.id}
+                      onClick={() =>
+                        setSelectedBudget(
+                          selectedBudget === budget.id ? null : budget.id
+                        )
+                      }
+                      className={`flex items-center justify-between rounded-lg border px-3 py-2 text-left text-sm transition-colors ${
+                        selectedBudget === budget.id
+                          ? "border-primary bg-primary/5 text-primary"
+                          : "border-border hover:border-primary"
+                      }`}
+                    >
+                      <span>{budget.label}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {budget.range}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
               {/* クリアボタン */}
               {activeFilterCount > 0 && (
                 <Button
@@ -198,17 +283,17 @@ export default function ExplorePage() {
             </div>
           </SheetContent>
         </Sheet>
-      </div>
+      </form>
 
       {/* アクティブフィルター表示 */}
-      {(selectedArea || selectedCategory) && (
+      {(selectedArea || selectedCategory || selectedBudget) && (
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <span className="text-xs text-muted-foreground">絞り込み:</span>
           {selectedArea && (
             <Badge
               variant="secondary"
               className="cursor-pointer gap-1"
-              onClick={() => setSelectedArea(null)}
+              onClick={() => handleAreaChange(selectedArea)}
             >
               {selectedArea}
               <X className="h-3 w-3" />
@@ -224,6 +309,16 @@ export default function ExplorePage() {
               <X className="h-3 w-3" />
             </Badge>
           )}
+          {selectedBudget && (
+            <Badge
+              variant="secondary"
+              className="cursor-pointer gap-1"
+              onClick={() => setSelectedBudget(null)}
+            >
+              {BUDGET_LABELS.find((b) => b.id === selectedBudget)?.label}
+              <X className="h-3 w-3" />
+            </Badge>
+          )}
         </div>
       )}
 
@@ -232,9 +327,7 @@ export default function ExplorePage() {
         {AREAS.map((area) => (
           <button
             key={area}
-            onClick={() =>
-              setSelectedArea(selectedArea === area ? null : area)
-            }
+            onClick={() => handleAreaChange(area)}
             className={`shrink-0 rounded-full border px-3 py-1 text-xs transition-colors ${
               selectedArea === area
                 ? "border-primary bg-primary text-primary-foreground"
@@ -325,5 +418,13 @@ export default function ExplorePage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function ExplorePage() {
+  return (
+    <Suspense>
+      <ExploreContent />
+    </Suspense>
   );
 }

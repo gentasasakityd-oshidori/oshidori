@@ -70,7 +70,7 @@ export function Header() {
     await supabase.auth.signOut();
     setUser(null);
     setNickname(null);
-    router.push("/");
+    router.push("/home");
     router.refresh();
   }
 
@@ -78,7 +78,7 @@ export function Header() {
     <header className="sticky top-0 z-50 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="mx-auto flex h-14 max-w-5xl items-center justify-between px-4">
         {/* ロゴ */}
-        <Link href="/" className="flex items-center gap-2">
+        <Link href="/home" className="flex items-center gap-2">
           <Image
             src="/logo.png"
             alt="オシドリ"

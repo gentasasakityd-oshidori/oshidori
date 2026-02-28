@@ -7,6 +7,8 @@ import {
   buildPhotoRequestPrompt,
 } from "@/lib/prompts";
 import type { StoryOutput, MenuOutput, PhotoRequestOutput } from "@/types/ai";
+import { saveStructuredTags } from "@/lib/queries/tags";
+import { logApiUsage, extractUsage } from "@/lib/ai/usage-logger";
 
 export async function POST(request: Request) {
   try {
@@ -90,6 +92,22 @@ export async function POST(request: Request) {
       }),
     ]);
 
+    // APIコスト記録（3つの生成を個別に記録）
+    const logEntries = [
+      { result: storyResult, endpoint: "interview/complete/story" },
+      { result: menuResult, endpoint: "interview/complete/menu" },
+      { result: photoResult, endpoint: "interview/complete/photo" },
+    ];
+    for (const entry of logEntries) {
+      const usage = extractUsage(entry.result);
+      logApiUsage({
+        endpoint: entry.endpoint,
+        ...usage,
+        shopId: interviewData.shop_id,
+        interviewId: interview_id,
+      });
+    }
+
     // レスポンスをパース
     function parseJsonResponse<T>(content: string): T | null {
       try {
@@ -167,6 +185,24 @@ export async function POST(request: Request) {
       savedPhotoRequest = data;
     }
 
+    // 構造化タグをDB保存（ストーリー生成結果から抽出）
+    if (story?.structured_tags) {
+      try {
+        await saveStructuredTags(
+          interviewData.shop_id,
+          {
+            kodawari: story.structured_tags.kodawari ?? [],
+            personality: story.structured_tags.personality ?? [],
+            scene: story.structured_tags.scene ?? [],
+          },
+          "ai_interview"
+        );
+      } catch (tagError) {
+        console.error("Failed to save structured tags:", tagError);
+        // タグ保存失敗はストーリー生成の成功に影響しない
+      }
+    }
+
     // transcript を保存
     await supabase
       .from("ai_interviews")
@@ -181,6 +217,7 @@ export async function POST(request: Request) {
       story: savedStory,
       menu: savedMenu,
       photoRequest: savedPhotoRequest,
+      structuredTags: story?.structured_tags ?? null,
     });
   } catch (error) {
     console.error("Interview complete error:", error);

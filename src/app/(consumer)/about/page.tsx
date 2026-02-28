@@ -28,8 +28,8 @@ export default function AboutPage() {
               飲食店の一番の価値だと私たちは考えています。
             </p>
             <p className="mt-3 text-sm leading-relaxed text-foreground/90">
-              オシドリは、AIが飲食店オーナーの想いを引き出し、
-              プロ品質のストーリーに変換するプラットフォームです。
+              オシドリは、飲食店オーナーの想いを丁寧に引き出し、
+              プロ品質のストーリーとして届けるプラットフォームです。
               点数評価ではなく「共感」で、お店とお客さんをつなぎます。
             </p>
           </div>
@@ -37,9 +37,9 @@ export default function AboutPage() {
           <div className="grid gap-6 sm:grid-cols-2">
             <div className="rounded-lg border p-6">
               <Sparkles className="h-8 w-8 text-primary" />
-              <h3 className="mt-3 font-semibold">AIストーリーテリング</h3>
+              <h3 className="mt-3 font-semibold">想いをストーリーに</h3>
               <p className="mt-2 text-sm text-muted-foreground">
-                発信が苦手でも大丈夫。AIとの1時間の対話だけで、
+                発信が苦手でも大丈夫。1時間の対話だけで、
                 お店の魅力が伝わるストーリーが完成します。
               </p>
             </div>

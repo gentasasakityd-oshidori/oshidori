@@ -2,7 +2,7 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 // 認証必須のパス
-const PROTECTED_PATHS = ["/dashboard", "/mypage", "/onboarding"];
+const PROTECTED_PATHS = ["/dashboard", "/mypage", "/onboarding", "/admin"];
 
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
