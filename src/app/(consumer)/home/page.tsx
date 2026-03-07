@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Sparkles, Heart, MessageCircle, BookOpen, MapPin, ArrowRight, TrendingUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { getPublishedShops, getOshiShopsUpdates } from "@/lib/queries";
+import { getPublishedShops } from "@/lib/queries";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { SearchBar } from "@/components/search-bar";
 import { SmallCard } from "@/components/shop-cards/small-card";
@@ -211,18 +211,8 @@ export default async function HomePage() {
   }
 
   // 推し店の新着更新を取得（ログイン済みユーザーのみ）
+  // TODO: getOshiShopsUpdates関数を実装する
   let oshiShopsUpdates: ShopWithRelations[] = [];
-  if (isLoggedIn) {
-    try {
-      const supabase = await createServerSupabaseClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        oshiShopsUpdates = await getOshiShopsUpdates(user.id);
-      }
-    } catch {
-      // 推し店更新取得失敗時は空配列のまま
-    }
-  }
 
   return (
     <>

@@ -19,7 +19,8 @@ export async function GET() {
       );
     }
 
-    const { data, error } = await supabase
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data, error } = await (supabase as any)
       .from("consumer_mood_preferences")
       .select("mood_tags")
       .eq("consumer_id", user.id)
@@ -67,7 +68,8 @@ export async function PUT(request: Request) {
     }
 
     // upsert: 存在すればupdate、なければinsert
-    const { error } = await supabase
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error } = await (supabase as any)
       .from("consumer_mood_preferences")
       .upsert(
         {

@@ -76,7 +76,7 @@ export async function GET(request: Request) {
  * 気分タグベースのレコメンド
  */
 async function getMoodBasedRecommendations(
-  supabase: ReturnType<typeof createServerSupabaseClient>,
+  supabase: Awaited<ReturnType<typeof createServerSupabaseClient>>,
   userId: string,
   moodTags: string[],
   limit: number,
@@ -177,7 +177,7 @@ async function getMoodBasedRecommendations(
  * デフォルトレコメンド（気分タグ未設定時）
  */
 async function getDefaultRecommendations(
-  supabase: ReturnType<typeof createServerSupabaseClient>,
+  supabase: Awaited<ReturnType<typeof createServerSupabaseClient>>,
   userId: string,
   limit: number,
   latitude: string | null,
@@ -193,7 +193,8 @@ async function getDefaultRecommendations(
     (oshiShops as { shop_id: string }[] | null)?.map((o) => o.shop_id) ?? [];
 
   // 推し登録数が多い人気店舗をレコメンド
-  const { data: popularShops } = await supabase.rpc(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: popularShops } = await (supabase as any).rpc(
     "get_popular_shops_excluding",
     {
       excluded_ids: oshiShopIds,

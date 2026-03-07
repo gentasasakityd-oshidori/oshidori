@@ -93,7 +93,7 @@ export function trackShopView(params: {
 
 /** 検索フィルター使用 */
 export function trackFilterUse(params: {
-  filterType: "area" | "station" | "category" | "budget" | "keyword" | "theme";
+  filterType: "area" | "station" | "category" | "budget" | "keyword" | "theme" | "mood";
   filterValue: string;
 }) {
   if (!POSTHOG_KEY) return;
