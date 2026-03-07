@@ -1,34 +1,100 @@
 "use client";
 
-import { useRef, useCallback } from "react";
-import { Download, Printer, QrCode, ExternalLink } from "lucide-react";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { Download, Printer, QrCode, ExternalLink, Loader2 } from "lucide-react";
 import { QRCode } from "react-qrcode-logo";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 
-// ダミーの店舗URL
-const SHOP_URL = "https://oshidori.jp/shops/kuramae-yamato";
-const SHOP_NAME = "蔵前 手打ちそば やまと";
+type ShopInfo = {
+  slug: string;
+  name: string;
+};
 
 export default function QRCodePage() {
   const qrRef = useRef<QRCode>(null);
+  const [shop, setShop] = useState<ShopInfo | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    async function load() {
+      try {
+        const res = await fetch("/api/dashboard/shop");
+        if (!res.ok) {
+          setError(res.status === 401 ? "ログインが必要です" : "データの読み込みに失敗しました");
+          setIsLoading(false);
+          return;
+        }
+        const data = await res.json();
+        if (data.shop) {
+          setShop({ slug: data.shop.slug, name: data.shop.name });
+        }
+      } catch {
+        setError("ネットワークエラーが発生しました");
+      }
+      setIsLoading(false);
+    }
+    load();
+  }, []);
+
+  const shopUrl = shop
+    ? `https://oshidori.vercel.app/shops/${shop.slug}`
+    : "";
 
   const handleDownload = useCallback(() => {
     if (qrRef.current) {
       (qrRef.current as unknown as { download: (type: string, name: string) => void }).download(
         "png",
-        "oshidori-qrcode"
+        `oshidori-qrcode-${shop?.slug ?? "shop"}`
       );
     }
-  }, []);
+  }, [shop]);
+
+  if (isLoading) {
+    return (
+      <div className="flex min-h-[50vh] items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (!shop) {
+    return (
+      <div className="mx-auto max-w-2xl space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold">QRコード</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            店舗情報を設定するとQRコードが生成されます
+          </p>
+        </div>
+        {error && (
+          <Card className="border-red-200 bg-red-50">
+            <CardContent className="p-3">
+              <p className="text-sm text-red-700">{error}</p>
+            </CardContent>
+          </Card>
+        )}
+        <Card className="border-dashed">
+          <CardContent className="flex flex-col items-center py-12">
+            <QrCode className="h-12 w-12 text-muted-foreground/40" />
+            <p className="mt-4 font-medium">店舗情報が見つかりません</p>
+            <p className="mt-1 text-center text-sm text-muted-foreground">
+              まず店舗プロフィールを設定してください
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       {/* ページタイトル */}
       <div>
         <h1 className="text-2xl font-bold">QRコード</h1>
-        <p className="mt-1 text-sm text-muted-foreground">{SHOP_NAME}</p>
+        <p className="mt-1 text-sm text-muted-foreground">{shop.name}</p>
       </div>
 
       {/* QRコード表示 */}
@@ -37,7 +103,7 @@ export default function QRCodePage() {
           <div className="rounded-lg border border-border bg-white p-4">
             <QRCode
               ref={qrRef}
-              value={SHOP_URL}
+              value={shopUrl}
               size={240}
               bgColor="#FFFFFF"
               fgColor="#3D2B1F"
@@ -46,10 +112,10 @@ export default function QRCodePage() {
               quietZone={16}
             />
           </div>
-          <p className="mt-4 text-center text-sm font-medium">{SHOP_NAME}</p>
+          <p className="mt-4 text-center text-sm font-medium">{shop.name}</p>
           <p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
             <ExternalLink className="h-3 w-3" />
-            {SHOP_URL}
+            {shopUrl}
           </p>
 
           <Separator className="my-6 w-full" />

@@ -1,10 +1,15 @@
 import { NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
-import { getOpenAIClient } from "@/lib/ai/client";
-import { logApiUsage, extractUsage } from "@/lib/ai/usage-logger";
-import { buildInterviewSystemPrompt } from "@/lib/prompts";
+import { createChatCompletion } from "@/lib/ai/client";
+import { logApiUsage } from "@/lib/ai/usage-logger";
+import {
+  buildInterviewSystemPrompt,
+  buildMonthlyUpdatePrompt,
+  buildMenuAdditionPrompt,
+  buildSeasonalMenuPrompt,
+} from "@/lib/prompts";
 import type { Shop } from "@/types/database";
-import type { InterviewMetadata } from "@/types/ai";
+import type { InterviewType, InterviewMetadata } from "@/types/ai";
 
 export async function POST(request: Request) {
   try {
@@ -18,6 +23,12 @@ export async function POST(request: Request) {
 
     const supabase = await createServerSupabaseClient();
 
+    // 認証チェック
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+    }
+
     // インタビュー情報を取得
     const { data: interview } = await supabase
       .from("ai_interviews")
@@ -29,9 +40,18 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Interview not found" }, { status: 404 });
     }
 
+    // オーナーシップ検証: shop が存在するかチェック（RLS でアクセス制御）
+    const interviewRecord = interview as { shop_id: string; status?: string };
+
+    // ステータス検証
+    if (interviewRecord.status === "completed") {
+      return NextResponse.json({ error: "Interview already completed" }, { status: 400 });
+    }
+
     const interviewData = interview as {
       id: string;
       shop_id: string;
+      interview_type: string;
       current_phase: number;
       engagement_context: {
         owner_name: string;
@@ -69,51 +89,101 @@ export async function POST(request: Request) {
 
     const history = (messages as { role: string; content: string }[] | null) ?? [];
 
-    // システムプロンプトを構築
-    const systemPrompt = buildInterviewSystemPrompt({
-      ownerName: typedShop?.owner_name ?? interviewData.engagement_context.owner_name,
-      shopName: typedShop?.name ?? interviewData.engagement_context.shop_name,
-      category: typedShop?.category ?? interviewData.engagement_context.category,
-      engagementContext: interviewData.engagement_context,
-    });
+    // interview_type に応じたシステムプロンプトを構築
+    const normalizedType = interviewData.interview_type === "initial"
+      ? "initial_interview"
+      : interviewData.interview_type;
 
-    // OpenAI にストリーミング送信
-    const openai = getOpenAIClient();
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4o",
-      temperature: 0.8,
+    let systemPrompt: string;
+    switch (normalizedType as InterviewType) {
+      case "monthly_update": {
+        // 前回インタビューのサマリーを取得
+        let previousSummary = "";
+        const { data: prevInterview } = await supabase
+          .from("ai_interviews")
+          .select("engagement_context")
+          .eq("shop_id", interviewData.shop_id)
+          .eq("status", "completed")
+          .neq("id", interview_id)
+          .order("completed_at", { ascending: false })
+          .limit(1)
+          .single();
+
+        if (prevInterview) {
+          const prev = prevInterview as { engagement_context: Record<string, unknown> | null };
+          const ctx = prev.engagement_context;
+          const keyQuotes = (ctx?.key_quotes as string[]) ?? [];
+          const coveredTopics = (ctx?.covered_topics as string[]) ?? [];
+          previousSummary = [
+            keyQuotes.length > 0 ? `印象的な言葉: ${keyQuotes.join("、")}` : "",
+            coveredTopics.length > 0 ? `カバー済みトピック: ${coveredTopics.join("、")}` : "",
+          ].filter(Boolean).join("\n");
+        }
+
+        systemPrompt = buildMonthlyUpdatePrompt({
+          ownerName: typedShop?.owner_name ?? interviewData.engagement_context.owner_name,
+          shopName: typedShop?.name ?? interviewData.engagement_context.shop_name,
+          previousSummary,
+        });
+        break;
+      }
+      case "menu_addition":
+        systemPrompt = buildMenuAdditionPrompt({
+          ownerName: typedShop?.owner_name ?? interviewData.engagement_context.owner_name,
+          shopName: typedShop?.name ?? interviewData.engagement_context.shop_name,
+        });
+        break;
+      case "seasonal_menu":
+        systemPrompt = buildSeasonalMenuPrompt({
+          ownerName: typedShop?.owner_name ?? interviewData.engagement_context.owner_name,
+          shopName: typedShop?.name ?? interviewData.engagement_context.shop_name,
+        });
+        break;
+      default:
+        systemPrompt = buildInterviewSystemPrompt({
+          ownerName: typedShop?.owner_name ?? interviewData.engagement_context.owner_name,
+          shopName: typedShop?.name ?? interviewData.engagement_context.shop_name,
+          category: typedShop?.category ?? interviewData.engagement_context.category,
+          engagementContext: interviewData.engagement_context,
+        });
+        break;
+    }
+
+    // プロバイダー抽象化 API でチャット補完
+    const result = await createChatCompletion({
       messages: [
-        { role: "system" as const, content: systemPrompt },
+        { role: "system", content: systemPrompt },
         ...history.map((m) => ({
           role: (m.role === "user" ? "user" : "assistant") as "user" | "assistant",
           content: m.content,
         })),
       ],
+      purpose: "dialogue",
     });
 
-    const aiContent = completion.choices[0]?.message?.content ?? "";
-
     // APIコスト記録
-    const usage = extractUsage(completion);
     logApiUsage({
       endpoint: "interview/message",
-      ...usage,
+      model: result.model,
+      promptTokens: result.usage.prompt_tokens,
+      completionTokens: result.usage.completion_tokens,
+      totalTokens: result.usage.total_tokens,
       shopId: interviewData.shop_id,
       interviewId: interview_id,
     });
 
     // JSONパース（メタデータ抽出）
-    let displayMessage = aiContent;
+    let displayMessage = result.content;
     let metadata: InterviewMetadata | null = null;
 
     try {
       // JSON部分を抽出
-      const jsonMatch = aiContent.match(/```json\s*([\s\S]*?)```/) ||
-        aiContent.match(/\{[\s\S]*"message"[\s\S]*"metadata"[\s\S]*\}/);
+      const jsonMatch = result.content.match(/```json\s*([\s\S]*?)```/) ||
+        result.content.match(/\{[\s\S]*"message"[\s\S]*"metadata"[\s\S]*\}/);
 
       const jsonStr = jsonMatch
         ? jsonMatch[1] || jsonMatch[0]
-        : aiContent;
+        : result.content;
 
       const parsed = JSON.parse(jsonStr);
       if (parsed.message) {
@@ -143,6 +213,14 @@ export async function POST(request: Request) {
         regulars: 5,
         future: 6,
         completed: 7,
+        // メニュー追加用フェーズ
+        catchup: 1,
+        episode: 2,
+        closing: 3,
+        // メニュー追加 v6.1 用フェーズ
+        background: 1,
+        ingredients_methods: 2,
+        customer_message: 3,
       };
 
       const nextPhaseNum = phaseMap[metadata.next_phase] ?? interviewData.current_phase;

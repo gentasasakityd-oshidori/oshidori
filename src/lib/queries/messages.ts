@@ -15,7 +15,7 @@ export async function getShopMessages(shopId: string): Promise<ShopMessage[]> {
   return (data as ShopMessage[]) ?? [];
 }
 
-/** 推しファン向けメッセージを取得（消費者用） */
+/** 応援者向けメッセージを取得（消費者用） */
 export async function getMessagesForFan(
   shopId: string,
   userId: string

@@ -16,6 +16,8 @@ import {
   Percent,
   Sparkles,
   Mail,
+  AlertTriangle,
+  CheckCircle2,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -92,6 +94,41 @@ export default function AdminDashboard() {
           オシドリ事業のリアルタイムKPI
         </p>
       </div>
+
+      {/* ===== KPIアラート ===== */}
+      {(() => {
+        const alerts: { label: string; current: string; target: string }[] = [];
+        if (stats.supply.story_publish_rate < 80) alerts.push({ label: "ストーリー公開率", current: `${stats.supply.story_publish_rate}%`, target: "80%" });
+        if (stats.supply.interview_completion_rate < 90) alerts.push({ label: "インタビュー完了率", current: `${stats.supply.interview_completion_rate}%`, target: "90%" });
+        if (stats.demand.oshi_registration_rate < 30) alerts.push({ label: "推し登録率", current: `${stats.demand.oshi_registration_rate}%`, target: "30%" });
+        if (stats.community.message_delivery_rate < 50) alerts.push({ label: "メッセージ配信率", current: `${stats.community.message_delivery_rate}%`, target: "50%" });
+        if (stats.community.avg_oshi_per_shop < 5) alerts.push({ label: "店舗あたりファン数", current: `${stats.community.avg_oshi_per_shop}人`, target: "5人" });
+        return alerts.length > 0 ? (
+          <Card className="border-orange-200 bg-orange-50">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <AlertTriangle className="h-4 w-4 text-orange-600" />
+                <span className="text-sm font-semibold text-orange-800">目標未達KPI（{alerts.length}件）</span>
+              </div>
+              <div className="grid gap-1.5 sm:grid-cols-2">
+                {alerts.map((a) => (
+                  <div key={a.label} className="flex items-center justify-between rounded-md bg-white/60 px-3 py-1.5 text-xs">
+                    <span className="text-orange-700">{a.label}</span>
+                    <span><span className="font-bold text-orange-800">{a.current}</span> <span className="text-gray-400">/ 目標{a.target}</span></span>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        ) : (
+          <Card className="border-green-200 bg-green-50">
+            <CardContent className="flex items-center gap-2 p-4">
+              <CheckCircle2 className="h-4 w-4 text-green-600" />
+              <span className="text-sm font-medium text-green-800">全KPIが目標を達成しています</span>
+            </CardContent>
+          </Card>
+        );
+      })()}
 
       {/* ===== 供給サイド（店舗）===== */}
       <section>
@@ -201,7 +238,7 @@ export default function AdminDashboard() {
             bg="bg-blue-50"
           />
           <KPICard
-            label="1店舗あたり平均推しファン数"
+            label="1店舗あたり平均ファン数"
             value={stats.community.avg_oshi_per_shop}
             icon={BarChart3}
             color="text-orange-600"
@@ -211,12 +248,12 @@ export default function AdminDashboard() {
         </div>
       </section>
 
-      {/* ===== 推しファン数ランキング ===== */}
+      {/* ===== 応援者数ランキング ===== */}
       {stats.top_shops.length > 0 && (
         <section>
           <div className="mb-3 flex items-center gap-2">
             <Award className="h-5 w-5 text-yellow-600" />
-            <h2 className="text-lg font-bold">推しファン数ランキング</h2>
+            <h2 className="text-lg font-bold">ファン数ランキング</h2>
           </div>
           <Card>
             <CardContent className="divide-y p-0">

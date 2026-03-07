@@ -4,6 +4,12 @@ import { NextResponse, type NextRequest } from "next/server";
 // 認証必須のパス
 const PROTECTED_PATHS = ["/dashboard", "/mypage", "/onboarding", "/admin"];
 
+// 権限が必要なパス
+const ROLE_REQUIRED_PATHS: { prefix: string; roles: string[] }[] = [
+  { prefix: "/dashboard", roles: ["shop_owner", "admin"] },
+  { prefix: "/admin", roles: ["admin"] },
+];
+
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
 
@@ -51,12 +57,53 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
+  // 権限チェック（ログイン済みユーザーのみ）
+  if (user) {
+    const roleCheck = ROLE_REQUIRED_PATHS.find((r) =>
+      pathname.startsWith(r.prefix)
+    );
+
+    if (roleCheck) {
+      // usersテーブルからroleを取得
+      const { data: profile } = await supabase
+        .from("users")
+        .select("role, is_admin")
+        .eq("id", user.id)
+        .single();
+
+      const userRole =
+        (profile as { role: string; is_admin: boolean } | null)?.role ||
+        "consumer";
+      const isAdmin =
+        (profile as { role: string; is_admin: boolean } | null)?.is_admin ||
+        false;
+
+      // admin権限チェック: roleがadminまたはis_adminがtrueの場合はadmin扱い
+      const effectiveRole = isAdmin ? "admin" : userRole;
+
+      if (!roleCheck.roles.includes(effectiveRole)) {
+        const url = request.nextUrl.clone();
+        url.pathname = "/unauthorized";
+        return NextResponse.redirect(url);
+      }
+    }
+  }
+
   // ログイン済みで /login にアクセスした場合 → トップへ
   if (pathname === "/login" && user) {
     const url = request.nextUrl.clone();
     url.pathname = "/";
     return NextResponse.redirect(url);
   }
+
+  // セキュリティヘッダーの追加
+  supabaseResponse.headers.set("X-Frame-Options", "DENY");
+  supabaseResponse.headers.set("X-Content-Type-Options", "nosniff");
+  supabaseResponse.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
+  supabaseResponse.headers.set(
+    "Permissions-Policy",
+    "camera=(), microphone=(self), geolocation=()"
+  );
 
   return supabaseResponse;
 }

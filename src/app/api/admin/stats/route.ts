@@ -45,7 +45,7 @@ export async function GET() {
     const totalOshi = oshiRes.count ?? 0;
     const totalEmpathy = empathyRes.count ?? 0;
 
-    // 推し店登録しているユーザー数
+    // 推し登録しているユーザー数
     const { data: oshiUserData } = await supabase
       .from("oshi_shops")
       .select("user_id");
@@ -75,10 +75,10 @@ export async function GET() {
     const messageShopCount = msgShopIds.size;
     const messageDeliveryRate = totalShops > 0 ? Math.round((messageShopCount / totalShops) * 100) : 0;
 
-    // 1店舗あたり平均推しファン数
+    // 1店舗あたり平均応援者数
     const avgOshiPerShop = publishedShops > 0 ? Math.round((totalOshi / publishedShops) * 10) / 10 : 0;
 
-    // --- 店舗ランキング（推しファン数上位5） ---
+    // --- 店舗ランキング（応援者数上位5） ---
     const { data: shopRankData } = await supabase
       .from("oshi_shops")
       .select("shop_id");

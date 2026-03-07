@@ -61,7 +61,7 @@ export default function NicknamePage() {
         return;
       }
 
-      router.push("/");
+      router.push("/home");
       router.refresh();
     } catch {
       setError("エラーが発生しました。もう一度お試しください。");

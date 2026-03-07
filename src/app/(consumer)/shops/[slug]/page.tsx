@@ -1,16 +1,30 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { Heart, MapPin, Clock, Phone, MessageCircle, Share2, ChevronRight, Search } from "lucide-react";
+import { Heart, MapPin, Clock, Phone, ChevronLeft, Check, CalendarClock, Send, Megaphone, ChevronRight, BookOpen, Sparkles } from "lucide-react";
 import Link from "next/link";
+import Image from "next/image";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { getShopBySlug as getDummyShopBySlug } from "@/lib/dummy-data";
-import { EMPATHY_TAGS } from "@/lib/constants";
+import { EMPATHY_TAGS, STORY_PERSPECTIVE_LABELS, BUDGET_LABELS } from "@/lib/constants";
+import { generateShopEmpathyCards } from "@/lib/shop-empathy-cards";
+import { WORDING } from "@/constants/wording";
+import { THEME_TO_DISPLAY_TAG } from "@/lib/display-tags";
 import type { ShopWithRelations, Shop, Story, Menu } from "@/types/database";
 import { createClient } from "@/lib/supabase/client";
+import { trackEmpathyTap, trackOshiToggle, trackShopView, trackStoryView, trackStoryViewComplete, trackReservationInquiry } from "@/lib/posthog";
+import dynamic from "next/dynamic";
+import { ShareButtons } from "@/components/share-buttons";
+import { SocialProof } from "@/components/social-proof";
+import { StoryReader } from "@/components/story-reader";
+
+const EngagementPrompt = dynamic(() => import("@/components/engagement-prompt").then(m => m.EngagementPrompt), { ssr: false });
+const ExperienceProfile = dynamic(() => import("@/components/experience-profile").then(m => m.ExperienceProfile), { ssr: false });
+import { trackStoryViewStart, trackStoryScrollDepth, trackQRAccess, trackUserLastAction } from "@/lib/tracking";
 
 export default function ShopDetailPage() {
   const params = useParams();
@@ -25,16 +39,62 @@ export default function ShopDetailPage() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isTapping, setIsTapping] = useState(false);
   const [isTogglingOshi, setIsTogglingOshi] = useState(false);
+  const [showStoryModal, setShowStoryModal] = useState(false);
+  const [storyOpenedAt, setStoryOpenedAt] = useState<number | null>(null);
+  // 予約打診
+  const [showReservationForm, setShowReservationForm] = useState(false);
+  const [reservationDate, setReservationDate] = useState("");
+  const [reservationTime, setReservationTime] = useState("");
+  const [reservationPartySize, setReservationPartySize] = useState("2");
+  const [reservationMessage, setReservationMessage] = useState("");
+  const [reservationSubmitting, setReservationSubmitting] = useState(false);
+  const [reservationSent, setReservationSent] = useState(false);
+  // 応援者一覧
+  const [fans, setFans] = useState<{ id: string; nickname: string; push_reason: string | null; registered_at: string }[]>([]);
+  const [fanCount, setFanCount] = useState(0);
+  // 近況更新
+  const [shopUpdates, setShopUpdates] = useState<{ id: string; content: string; created_at: string }[]>([]);
+  // ファンクラブ
+  const [fanClubPlan, setFanClubPlan] = useState<{ plan_name: string; price: number; description: string | null; benefits: unknown } | null>(null);
+  const [photoIndex, setPhotoIndex] = useState(0);
+  // マイクロインタラクション
+  const [floatingHearts, setFloatingHearts] = useState<Array<{ id: number; x: number; delay: number }>>([]);
+  const [confettiParticles, setConfettiParticles] = useState<Array<{ id: number; x: number; y: number; color: string }>>([]);
+  const [tagBounced, setTagBounced] = useState(false);
+  const tagSectionRef = useRef<HTMLDivElement>(null);
+  const heartIdRef = useRef(0);
+  const confettiIdRef = useRef(0);
 
-  // Check auth state
   useEffect(() => {
     const supabase = createClient();
     supabase.auth.getUser().then(({ data: { user } }) => {
       setIsAuthenticated(!!user);
     });
-  }, []);
+    // QRコード経由アクセスのトラッキング
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("from") === "qr") {
+        trackQRAccess({ shopSlug: slug });
+      }
+    }
+  }, [slug]);
 
-  // Load empathy state for the story
+  // タグバウンス: IntersectionObserverでビューポート進入時に発火
+  useEffect(() => {
+    if (tagBounced || !tagSectionRef.current) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setTagBounced(true);
+          observer.disconnect();
+        }
+      },
+      { threshold: 0.3 }
+    );
+    observer.observe(tagSectionRef.current);
+    return () => observer.disconnect();
+  }, [tagBounced, shop]);
+
   const loadEmpathyState = useCallback(async (storyId: string) => {
     try {
       const res = await fetch(`/api/empathy/${storyId}`);
@@ -43,30 +103,23 @@ export default function ShopDetailPage() {
         setTappedTags(new Set(data.user_tapped_tags));
         setEmpathyCount(data.total);
       }
-    } catch {
-      // Ignore
-    }
+    } catch { /* ignore */ }
   }, []);
 
-  // Load oshi state
   const loadOshiState = useCallback(async (shopId: string) => {
     if (!isAuthenticated) return;
     try {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
-
       const { data } = await supabase
         .from("oshi_shops")
         .select("id")
         .eq("user_id", user.id)
         .eq("shop_id", shopId)
         .maybeSingle();
-
       setIsOshi(!!data);
-    } catch {
-      // Ignore
-    }
+    } catch { /* ignore */ }
   }, [isAuthenticated]);
 
   useEffect(() => {
@@ -86,22 +139,18 @@ export default function ShopDetailPage() {
           if (dummy) {
             setEmpathyCount(dummy._count.empathy);
             setOshiCount(dummy._count.oshi);
+            if (dummy.fan_club_plan) setFanClubPlan(dummy.fan_club_plan);
           }
           return;
         }
 
         const typedShop = shopData as Shop;
-        const [storiesRes, menusRes, oshiRes] = await Promise.all([
-          supabase
-            .from("stories")
-            .select("*")
-            .eq("shop_id", typedShop.id)
-            .eq("status", "published"),
+        const [storiesRes, menusRes, oshiRes, displayTagsRes, structuredTagsRes] = await Promise.all([
+          supabase.from("stories").select("*").eq("shop_id", typedShop.id).eq("status", "published"),
           supabase.from("menus").select("*").eq("shop_id", typedShop.id),
-          supabase
-            .from("oshi_shops")
-            .select("id", { count: "exact", head: true })
-            .eq("shop_id", typedShop.id),
+          supabase.from("oshi_shops").select("id", { count: "exact", head: true }).eq("shop_id", typedShop.id),
+          supabase.from("display_tags").select("*").eq("shop_id", typedShop.id).order("priority", { ascending: false }),
+          supabase.from("shop_structured_tags").select("*").eq("shop_id", typedShop.id),
         ]);
 
         const storyIds = (storiesRes.data as Story[] | null)?.map((s) => s.id) ?? [];
@@ -114,43 +163,78 @@ export default function ShopDetailPage() {
           empathy = empathyRes.count ?? 0;
         }
 
-        const oshiCountVal = oshiRes.count ?? 0;
-
         const result: ShopWithRelations = {
           ...typedShop,
           stories: (storiesRes.data as Story[]) ?? [],
           menus: (menusRes.data as Menu[]) ?? [],
-          _count: {
-            oshi: oshiCountVal,
-            empathy,
-          },
+          display_tags: (displayTagsRes.data as ShopWithRelations["display_tags"]) ?? [],
+          structured_tags: (structuredTagsRes.data as ShopWithRelations["structured_tags"]) ?? [],
+          _count: { oshi: oshiRes.count ?? 0, empathy },
         };
         setShop(result);
         setEmpathyCount(empathy);
-        setOshiCount(oshiCountVal);
+        setOshiCount(oshiRes.count ?? 0);
 
-        // Load user-specific state
-        if (storyIds.length > 0) {
-          loadEmpathyState(storyIds[0]);
+        trackShopView({ shopSlug: typedShop.slug, shopName: typedShop.name, area: typedShop.area, category: typedShop.category });
+        if (result.stories[0]) {
+          trackStoryView({ storyId: result.stories[0].id, shopSlug: typedShop.slug, shopName: typedShop.name });
         }
+
+        if (storyIds.length > 0) loadEmpathyState(storyIds[0]);
         loadOshiState(typedShop.id);
+
+        fetch(`/api/shops/${slug}/fans`).then(r => r.ok ? r.json() : null).then(d => {
+          if (d) { setFans(d.fans ?? []); setFanCount(d.total ?? 0); }
+        }).catch(() => {});
+        fetch(`/api/shops/${slug}/updates`).then(r => r.ok ? r.json() : null).then(d => {
+          if (d) setShopUpdates(d.updates ?? []);
+        }).catch(() => {});
+        // ファンクラブプラン取得
+        fetch(`/api/fan-club?shopId=${typedShop.id}`).then(r => r.ok ? r.json() : null).then(d => {
+          if (d?.plan) setFanClubPlan(d.plan);
+        }).catch(() => {});
       } catch {
         const dummy = getDummyShopBySlug(slug);
         setShop(dummy ?? null);
-        if (dummy) {
-          setEmpathyCount(dummy._count.empathy);
-          setOshiCount(dummy._count.oshi);
-        }
+        if (dummy) { setEmpathyCount(dummy._count.empathy); setOshiCount(dummy._count.oshi); if (dummy.fan_club_plan) setFanClubPlan(dummy.fan_club_plan); }
       }
     }
     fetchShop();
   }, [slug, loadEmpathyState, loadOshiState]);
 
-  // Loading
   if (shop === undefined) {
     return (
-      <div className="flex min-h-[60vh] items-center justify-center">
-        <p className="text-muted-foreground">読み込み中...</p>
+      <div className="mx-auto max-w-3xl">
+        {/* スケルトン: ヒーロー画像 */}
+        <div className="aspect-[16/9] w-full animate-skeleton" />
+        {/* スケルトン: 店舗情報 */}
+        <div className="px-4 pt-4 pb-3">
+          <div className="flex items-start gap-3">
+            <div className="h-12 w-12 shrink-0 rounded-full animate-skeleton" />
+            <div className="flex-1 space-y-2">
+              <div className="h-5 w-3/4 animate-skeleton" />
+              <div className="h-3.5 w-1/2 animate-skeleton" />
+            </div>
+          </div>
+          <div className="mt-3 flex gap-2">
+            <div className="h-6 w-20 rounded-full animate-skeleton" />
+            <div className="h-6 w-24 rounded-full animate-skeleton" />
+            <div className="h-6 w-16 rounded-full animate-skeleton" />
+          </div>
+        </div>
+        {/* スケルトン: ボタン */}
+        <div className="px-4 pb-4">
+          <div className="h-10 w-full rounded-xl animate-skeleton" />
+        </div>
+        {/* スケルトン: ストーリー */}
+        <div className="border-t border-gray-100 px-4 py-5 space-y-3">
+          <div className="h-4 w-40 animate-skeleton" />
+          <div className="rounded-xl bg-gray-50 p-4 space-y-2">
+            <div className="h-3.5 w-full animate-skeleton" />
+            <div className="h-3.5 w-5/6 animate-skeleton" />
+            <div className="h-3.5 w-2/3 animate-skeleton" />
+          </div>
+        </div>
       </div>
     );
   }
@@ -158,11 +242,11 @@ export default function ShopDetailPage() {
   if (!shop) {
     return (
       <div className="flex min-h-[60vh] flex-col items-center justify-center px-4">
-        <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-muted">
-          <Search className="h-8 w-8 text-muted-foreground/40" />
+        <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-gray-100">
+          <span className="text-2xl text-gray-300">🍽</span>
         </div>
-        <h2 className="text-xl font-bold">お店が見つかりません</h2>
-        <p className="mt-2 text-center text-sm text-muted-foreground">
+        <h2 className="text-lg font-bold text-[#2C3E50]">お店が見つかりません</h2>
+        <p className="mt-2 text-center text-sm text-gray-400">
           お探しのお店は削除されたか、URLが正しくない可能性があります
         </p>
         <Button asChild className="mt-4">
@@ -175,285 +259,764 @@ export default function ShopDetailPage() {
   const mainStory = shop.stories[0];
   const hoursDisplay = typeof shop.hours === "string" ? shop.hours : null;
 
-  async function handleEmpathyTap(tagId: string) {
-    if (!isAuthenticated) {
-      router.push(`/login?next=/shops/${slug}`);
-      return;
+  // C-12: Collect all photos for carousel (shop image + menu photos)
+  const allPhotos: string[] = [];
+  if (shop.image_url) allPhotos.push(shop.image_url);
+  for (const menu of shop.menus) {
+    if (menu.photo_url && !allPhotos.includes(menu.photo_url)) {
+      allPhotos.push(menu.photo_url);
     }
-    if (!mainStory || isTapping) return;
+  }
 
+  // Display tags from DB or story_themes fallback
+  const displayTags: Array<{ icon: string; label: string }> = (() => {
+    if (shop.display_tags && shop.display_tags.length > 0) {
+      return shop.display_tags.slice(0, 3).map((t) => ({ icon: t.icon, label: t.label }));
+    }
+    if (!mainStory?.story_themes) return [];
+    const themes = mainStory.story_themes as Record<string, number>;
+    return Object.entries(themes)
+      .filter(([key]) => key in THEME_TO_DISPLAY_TAG)
+      .sort(([, a], [, b]) => b - a)
+      .slice(0, 3)
+      .map(([key]) => THEME_TO_DISPLAY_TAG[key]);
+  })();
+
+  // ハートフロートを生成
+  function spawnHearts() {
+    const newHearts = Array.from({ length: 3 }, (_, i) => ({
+      id: ++heartIdRef.current,
+      x: (Math.random() - 0.5) * 40,
+      delay: i * 100,
+    }));
+    setFloatingHearts((prev) => [...prev, ...newHearts]);
+    setTimeout(() => {
+      setFloatingHearts((prev) => prev.filter((h) => !newHearts.find((n) => n.id === h.id)));
+    }, 800);
+  }
+
+  // コンフェティを生成
+  function spawnConfetti() {
+    const colors = ["#E06A4E", "#F5A623", "#E88FAB", "#FFD700", "#8B5CF6"];
+    const particles = Array.from({ length: 8 }, (_, i) => {
+      const angle = (i / 8) * Math.PI * 2 + (Math.random() - 0.5) * 0.5;
+      const dist = 30 + Math.random() * 40;
+      return {
+        id: ++confettiIdRef.current,
+        x: Math.cos(angle) * dist,
+        y: Math.sin(angle) * dist - 20,
+        color: colors[i % colors.length],
+      };
+    });
+    setConfettiParticles((prev) => [...prev, ...particles]);
+    setTimeout(() => {
+      setConfettiParticles((prev) => prev.filter((p) => !particles.find((n) => n.id === p.id)));
+    }, 1000);
+  }
+
+  async function handleEmpathyTap(tagId: string) {
+    if (!isAuthenticated) { router.push(`/login?next=/shops/${slug}`); return; }
+    if (!mainStory || isTapping) return;
     setIsTapping(true);
-    // Optimistic update
+    const wasTapped = tappedTags.has(tagId);
+    trackEmpathyTap({ storyId: mainStory.id, shopSlug: slug, tagType: tagId, action: wasTapped ? "untap" : "tap" });
+    if (!wasTapped) {
+      trackUserLastAction({ actionType: "empathy_tap", shopId: shop!.id });
+      // ハートフロート + 触覚フィードバック
+      spawnHearts();
+      if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(30);
+    }
     setTappedTags((prev) => {
       const next = new Set(prev);
-      if (next.has(tagId)) {
-        next.delete(tagId);
-        setEmpathyCount((c) => c - 1);
-      } else {
-        next.add(tagId);
-        setEmpathyCount((c) => c + 1);
-      }
+      if (next.has(tagId)) { next.delete(tagId); setEmpathyCount((c) => c - 1); }
+      else { next.add(tagId); setEmpathyCount((c) => c + 1); }
       return next;
     });
-
     try {
       const res = await fetch("/api/empathy", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          story_id: mainStory.id,
-          tag_type: tagId,
-        }),
+        body: JSON.stringify({ story_id: mainStory.id, tag_type: tagId }),
       });
-
       if (res.ok) {
         const data = await res.json();
         setTappedTags(new Set(data.user_tapped_tags));
         setEmpathyCount(data.total);
       }
-    } catch {
-      // Revert on error
-      loadEmpathyState(mainStory.id);
-    } finally {
-      setIsTapping(false);
-    }
+    } catch { loadEmpathyState(mainStory.id); }
+    finally { setIsTapping(false); }
   }
 
   async function handleOshiToggle() {
-    if (!isAuthenticated) {
-      router.push(`/login?next=/shops/${slug}`);
-      return;
-    }
+    if (!isAuthenticated) { router.push(`/login?next=/shops/${slug}`); return; }
     if (isTogglingOshi) return;
-
     setIsTogglingOshi(true);
-    // Optimistic update
     const wasOshi = isOshi;
     setIsOshi(!wasOshi);
     setOshiCount((c) => (wasOshi ? c - 1 : c + 1));
-
+    trackOshiToggle({ shopId: shop!.id, shopSlug: slug, action: wasOshi ? "unregister" : "register" });
+    if (!wasOshi) {
+      trackUserLastAction({ actionType: "oshi_toggle", shopId: shop!.id });
+      // コンフェティ + 触覚フィードバック
+      spawnConfetti();
+      if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(50);
+    }
     try {
       const res = await fetch("/api/oshi", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ shop_id: shop!.id }),
       });
-
       if (res.ok) {
         const data = await res.json();
         setIsOshi(data.is_oshi);
         setOshiCount(data.oshi_count);
       }
     } catch {
-      // Revert on error
       setIsOshi(wasOshi);
       setOshiCount((c) => (wasOshi ? c + 1 : c - 1));
-    } finally {
-      setIsTogglingOshi(false);
-    }
+    } finally { setIsTogglingOshi(false); }
+  }
+
+  async function handleReservationSubmit() {
+    if (!isAuthenticated) { router.push(`/login?next=/shops/${slug}`); return; }
+    if (!reservationDate || !reservationTime || reservationSubmitting) return;
+    setReservationSubmitting(true);
+    try {
+      const res = await fetch("/api/reservations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          shop_id: shop!.id,
+          preferred_date: reservationDate,
+          preferred_time: reservationTime,
+          party_size: Number(reservationPartySize),
+          message: reservationMessage || undefined,
+        }),
+      });
+      if (res.ok) {
+        setReservationSent(true);
+        setShowReservationForm(false);
+        trackReservationInquiry({ shopSlug: slug, partySize: Number(reservationPartySize), reservationDate });
+      }
+    } catch { /* ignore */ }
+    finally { setReservationSubmitting(false); }
   }
 
   return (
     <div className="mx-auto max-w-3xl">
-      {/* パンくず */}
-      <nav className="flex items-center gap-2 border-b px-4 py-2 text-xs text-muted-foreground">
-        <Link href="/" className="transition-colors hover:text-foreground">ホーム</Link>
-        <ChevronRight className="h-3 w-3" />
-        <Link href="/explore" className="transition-colors hover:text-foreground">お店を探す</Link>
-        <ChevronRight className="h-3 w-3" />
-        <span className="text-foreground">{shop.name}</span>
-      </nav>
+      {/* Floating header */}
+      <div className="sticky top-14 z-40 flex items-center justify-between bg-white/90 px-4 py-2 backdrop-blur md:hidden">
+        <button onClick={() => router.back()} className="flex items-center gap-1 text-sm text-gray-500">
+          <ChevronLeft className="h-4 w-4" />
+          <span>戻る</span>
+        </button>
+        <ShareButtons
+          url={typeof window !== "undefined" ? window.location.href : `https://oshidori.vercel.app/shops/${slug}`}
+          title={shop.name}
+          text={`${shop.name}のストーリー | オシドリ`}
+        />
+      </div>
 
-      {/* カバー画像 */}
-      <div className="relative h-48 bg-gradient-to-br from-warm to-secondary md:h-64">
-        <div className="absolute bottom-4 left-4 right-4">
-          <div className="flex items-end gap-3">
-            <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full border-2 border-background bg-primary/20 text-2xl font-bold text-primary">
+      {/* Hero photo - 16:9 aspect with carousel */}
+      <div
+        className="relative aspect-[16/9] w-full overflow-hidden bg-gradient-to-br from-[#E06A4E]/80 to-[#B8533D]/60"
+        onTouchStart={(e) => {
+          if (allPhotos.length <= 1) return;
+          const startX = e.touches[0].clientX;
+          const el = e.currentTarget;
+          const handleEnd = (ev: TouchEvent) => {
+            const diff = startX - ev.changedTouches[0].clientX;
+            if (Math.abs(diff) > 50) {
+              setPhotoIndex((prev) =>
+                diff > 0
+                  ? Math.min(prev + 1, allPhotos.length - 1)
+                  : Math.max(prev - 1, 0)
+              );
+            }
+            el.removeEventListener("touchend", handleEnd);
+          };
+          el.addEventListener("touchend", handleEnd);
+        }}
+      >
+        {allPhotos.length > 0 ? (
+          <>
+            <Image
+              src={allPhotos[photoIndex]}
+              alt={`${shop.name} 写真 ${photoIndex + 1}`}
+              fill
+              className="object-cover transition-opacity duration-300"
+              sizes="(max-width: 768px) 100vw, 768px"
+              priority={photoIndex === 0}
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent" />
+          </>
+        ) : (
+          <div className="flex h-full items-center justify-center">
+            {mainStory?.catchcopy_primary ? (
+              <p className="px-8 text-center text-2xl font-bold text-white" style={{ fontFamily: "'Noto Serif JP', serif" }}>
+                {mainStory.catchcopy_primary}
+              </p>
+            ) : (
+              <span className="text-5xl text-white/30">🍽</span>
+            )}
+          </div>
+        )}
+        {/* L1 Catchcopy overlay */}
+        {mainStory?.catchcopy_primary && allPhotos.length > 0 && (
+          <div className="absolute bottom-4 left-4 right-4">
+            <p className="text-lg font-bold leading-snug text-white drop-shadow-lg" style={{ fontFamily: "'Noto Serif JP', serif" }}>
+              {mainStory.catchcopy_primary}
+            </p>
+          </div>
+        )}
+        {/* Photo counter dots */}
+        {allPhotos.length > 1 && (
+          <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1.5">
+            {allPhotos.map((_, i) => (
+              <button
+                key={i}
+                onClick={() => setPhotoIndex(i)}
+                className={`h-1.5 rounded-full transition-all ${
+                  i === photoIndex ? "w-4 bg-white" : "w-1.5 bg-white/50"
+                }`}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Shop info header */}
+      <div className="px-4 pt-4 pb-3">
+        <div className="flex items-start gap-3">
+          {shop.owner_image_url ? (
+            <Image
+              src={shop.owner_image_url}
+              alt={shop.owner_name}
+              width={48}
+              height={48}
+              className="h-12 w-12 shrink-0 rounded-full border-2 border-white object-cover shadow-sm"
+            />
+          ) : (
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#E06A4E]/10 text-lg font-bold text-[#E06A4E]">
               {shop.owner_name[0]}
             </div>
-            <div className="mb-1">
-              <h1 className="text-lg font-bold text-foreground md:text-xl">
-                {shop.name}
-              </h1>
-              <p className="text-sm text-muted-foreground">{shop.owner_name}</p>
-            </div>
+          )}
+          <div className="flex-1 min-w-0">
+            <h1 className="text-lg font-bold text-[#2C3E50] leading-snug">{shop.name}</h1>
+            <p className="text-sm text-gray-500">
+              {shop.area} · {shop.category}
+            </p>
           </div>
         </div>
+
+        {/* Display tags (タグバウンスアニメーション付き) */}
+        {displayTags.length > 0 && (
+          <div ref={tagSectionRef} className="mt-2 flex flex-wrap gap-2">
+            {displayTags.map((tag, i) => (
+              <span
+                key={i}
+                className={`inline-flex items-center gap-1 rounded-full bg-gray-50 px-2.5 py-1 text-xs text-gray-600 ${
+                  tagBounced ? "animate-tag-bounce" : ""
+                }`}
+                style={tagBounced ? { animationDelay: `${i * 80}ms`, animationFillMode: "both" } : undefined}
+              >
+                <span>{tag.icon}</span>
+                <span>{tag.label}</span>
+              </span>
+            ))}
+          </div>
+        )}
       </div>
 
-      {/* アクションバー */}
-      <div className="flex items-center justify-between border-b px-4 py-3">
-        <div className="flex items-center gap-4 text-sm text-muted-foreground">
-          <span className="flex items-center gap-1">
-            <Heart className={`h-4 w-4 ${isOshi ? "fill-primary text-primary" : ""}`} />
-            {oshiCount} 推し
-          </span>
-          <span className="flex items-center gap-1">
-            <MessageCircle className="h-4 w-4" />
-            {empathyCount} 共感
-          </span>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => {
-              if (typeof navigator !== "undefined" && navigator.share) {
-                navigator.share({ title: shop.name, url: window.location.href });
-              }
-            }}
-          >
-            <Share2 className="h-4 w-4" />
-          </Button>
-          <Button
-            size="sm"
-            variant={isOshi ? "secondary" : "default"}
-            className="gap-1"
-            onClick={handleOshiToggle}
-            disabled={isTogglingOshi}
-          >
-            <Heart className={`h-4 w-4 ${isOshi ? "fill-current" : ""}`} />
-            {isOshi ? "推し店登録済み" : "推し店に追加"}
-          </Button>
-        </div>
+      {/* Social proof */}
+      <div className="px-4">
+        <SocialProof shopId={shop.id} oshiCount={oshiCount} />
       </div>
 
-      {/* タブ */}
-      <Tabs defaultValue="story" className="px-4 py-4">
-        <TabsList className="grid w-full grid-cols-4">
-          <TabsTrigger value="story">ストーリー</TabsTrigger>
-          <TabsTrigger value="menu">食べてほしい一品</TabsTrigger>
-          <TabsTrigger value="info">店舗情報</TabsTrigger>
-          <TabsTrigger value="fans">ファンの声</TabsTrigger>
-        </TabsList>
+      {/* Oshi button - コンパクト版（常時表示）+ コンフェティ */}
+      <div className="relative px-4 pb-4 pt-2">
+        <Button
+          className={`w-full gap-2 rounded-xl py-2.5 text-sm font-medium transition-all active:scale-[0.97] ${
+            isOshi
+              ? "bg-gray-100 text-gray-600 hover:bg-gray-200 border border-gray-200"
+              : "bg-[#E06A4E] text-white hover:bg-[#d0593d]"
+          }`}
+          onClick={handleOshiToggle}
+          disabled={isTogglingOshi}
+        >
+          <Heart className={`h-4 w-4 ${isOshi ? "fill-[#E06A4E] text-[#E06A4E]" : ""}`} />
+          {isOshi ? WORDING.FAVORITE_REGISTERED : WORDING.ADD_TO_FAVORITES}
+        </Button>
+        {/* コンフェティパーティクル */}
+        {confettiParticles.map((p) => (
+          <span
+            key={p.id}
+            className="absolute animate-confetti text-sm"
+            style={{
+              left: "50%",
+              top: "50%",
+              color: p.color,
+              "--confetti-x": `${p.x}px`,
+              "--confetti-y": `${p.y}px`,
+            } as React.CSSProperties}
+          >
+            ●
+          </span>
+        ))}
+      </div>
 
-        {/* ストーリータブ */}
-        <TabsContent value="story" className="mt-4">
-          {mainStory ? (
-            <article>
-              <h2 className="text-xl font-bold leading-snug">{mainStory.title}</h2>
-              <div className="mt-4 whitespace-pre-line text-sm leading-relaxed text-foreground/90">
-                {mainStory.body}
+      {/* このお店のこだわり */}
+      {displayTags.length > 0 && mainStory && (
+        <section className="border-t border-gray-100 px-4 py-5">
+          <h2 className="text-sm font-bold text-[#2C3E50] mb-3">このお店のこだわり</h2>
+          <div className="space-y-2.5">
+            {displayTags.map((tag, i) => (
+              <div key={i} className="flex items-start gap-2.5">
+                <span className="text-lg mt-0.5">{tag.icon}</span>
+                <div>
+                  <p className="text-sm font-medium text-[#2C3E50]">{tag.label}</p>
+                  {mainStory.key_quotes && Array.isArray(mainStory.key_quotes) && mainStory.key_quotes[i] && (
+                    <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">
+                      {String(mainStory.key_quotes[i])}
+                    </p>
+                  )}
+                </div>
               </div>
-            </article>
-          ) : (
-            <p className="py-8 text-center text-muted-foreground">ストーリーは準備中です。</p>
-          )}
+            ))}
+          </div>
+        </section>
+      )}
 
-          {/* 共感タップ */}
-          <div className="mt-8 rounded-lg border bg-warm-light p-4">
-            <p className="text-center text-sm font-medium">このストーリーに共感しましたか？</p>
-            <div className="mt-3 flex flex-wrap justify-center gap-2">
-              {EMPATHY_TAGS.map((tag) => (
+      {/* ストーリーセクション - インライン展開 */}
+      {mainStory && (
+        <section className="border-t border-gray-100 px-4 py-5">
+          <h2 className="text-sm font-bold text-[#2C3E50] mb-1">このお店のストーリー</h2>
+          <p className="text-[11px] text-gray-400 mb-3 flex items-center gap-1">
+            <Sparkles className="h-3 w-3" />
+            オシドリ編集部が取材しました
+          </p>
+
+          <div className="rounded-xl bg-[#F9F9F6] p-4">
+            {/* プレビューテキスト（常時表示） */}
+            {!showStoryModal && (
+              <>
+                {mainStory.highlight ? (
+                  <p className="text-sm leading-relaxed text-[#2C3E50]/85">
+                    {mainStory.highlight}
+                  </p>
+                ) : mainStory.summary ? (
+                  <p className="text-sm leading-relaxed text-[#2C3E50]/85">
+                    {mainStory.summary}
+                  </p>
+                ) : null}
                 <button
-                  key={tag.id}
-                  onClick={() => handleEmpathyTap(tag.id)}
-                  disabled={isTapping}
-                  className={`rounded-full border px-3 py-1.5 text-xs transition-all duration-200 ${
-                    tappedTags.has(tag.id)
-                      ? "border-primary bg-primary text-primary-foreground scale-110 shadow-md"
-                      : "border-primary/30 bg-background text-primary hover:bg-primary/5 hover:border-primary/50 active:scale-95"
-                  }`}
+                  onClick={() => {
+                    setShowStoryModal(true);
+                    setStoryOpenedAt(Date.now());
+                    trackStoryViewStart({ shopId: shop.id, storyId: mainStory.id, from: "detail" });
+                  }}
+                  className="mt-3 flex items-center gap-1 text-sm font-medium text-[#E06A4E] hover:text-[#d0593d] transition-colors"
                 >
-                  {tag.emoji} {tag.label}
+                  <BookOpen className="h-4 w-4" />
+                  ストーリーを読む
+                  <ChevronRight className="h-4 w-4" />
                 </button>
-              ))}
-            </div>
-            {tappedTags.size > 0 && (
-              <div className="mt-3 flex items-center justify-center gap-1.5 text-xs text-primary animate-in fade-in duration-300">
-                <Heart className="h-3.5 w-3.5 fill-primary" />
-                共感を送りました！
+              </>
+            )}
+
+            {/* インライン展開（全文） */}
+            {showStoryModal && (
+              <div className="animate-in fade-in duration-300">
+                <h3 className="text-lg font-bold leading-snug text-[#2C3E50]">{mainStory.title}</h3>
+                {mainStory.body && (
+                  <div className="mt-1 flex items-center justify-between">
+                    <p className="text-xs text-gray-400">
+                      {(() => {
+                        const minutes = Math.ceil(mainStory.body.length / 500);
+                        return minutes < 1 ? "1分以内で読めます" : `約${minutes}分で読めます`;
+                      })()}
+                    </p>
+                    <StoryReader text={mainStory.body} title={mainStory.title} />
+                  </div>
+                )}
+                <div className="mt-4 space-y-4">
+                  {(mainStory.body || "").split(/\n\n+/).filter(Boolean).map((paragraph, idx) => {
+                    const perspective = STORY_PERSPECTIVE_LABELS.find((label) =>
+                      label.keywords.some((kw) => paragraph.includes(kw))
+                    );
+                    return (
+                      <div key={idx} className="relative">
+                        {perspective && (
+                          <span className={`mb-1.5 inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium ${perspective.color}`}>
+                            {perspective.emoji} {perspective.label}
+                          </span>
+                        )}
+                        <p className="whitespace-pre-line text-base leading-[1.9] text-[#2C3E50]/90">
+                          {paragraph}
+                        </p>
+                      </div>
+                    );
+                  })}
+                </div>
+                {/* C-13: 共感タップをストーリー末尾にインライン配置（店舗固有カード対応） */}
+                <div className="mt-6 border-t border-gray-200/60 pt-4">
+                  <p className="text-center text-sm font-medium text-[#2C3E50] mb-3">このストーリーに共感しましたか？</p>
+                  <div className="relative flex flex-wrap justify-center gap-2">
+                    {generateShopEmpathyCards(mainStory, shop.structured_tags).map((tag) => (
+                      <button
+                        key={tag.id}
+                        onClick={() => handleEmpathyTap(tag.id)}
+                        disabled={isTapping}
+                        className={`relative rounded-full border px-3 py-1.5 text-xs transition-all duration-200 ${
+                          tappedTags.has(tag.id)
+                            ? "border-[#E06A4E] bg-[#E06A4E] text-white scale-105 shadow-sm"
+                            : "border-[#E06A4E]/30 bg-white text-[#E06A4E] hover:bg-[#E06A4E]/5 active:scale-95"
+                        }`}
+                      >
+                        {tag.emoji} {tag.label}
+                      </button>
+                    ))}
+                    {/* ハートフロートアニメーション */}
+                    {floatingHearts.map((heart) => (
+                      <span
+                        key={heart.id}
+                        className="absolute animate-heart-float text-lg"
+                        style={{
+                          left: `calc(50% + ${heart.x}px)`,
+                          bottom: "100%",
+                          animationDelay: `${heart.delay}ms`,
+                          animationFillMode: "both",
+                        }}
+                      >
+                        ❤️
+                      </span>
+                    ))}
+                  </div>
+                  {tappedTags.size > 0 && (
+                    <div className="mt-3 flex items-center justify-center gap-1.5 text-xs text-[#E06A4E] animate-in fade-in duration-300">
+                      <Heart className="h-3.5 w-3.5 fill-[#E06A4E]" />
+                      共感を送りました！
+                    </div>
+                  )}
+                </div>
+
+                {/* エンゲージメント促進プロンプト */}
+                <EngagementPrompt shopId={shop.id} storyId={mainStory.id} visible={showStoryModal} />
+
+                <button
+                  onClick={() => {
+                    if (storyOpenedAt && mainStory) {
+                      trackStoryViewComplete({ storyId: mainStory.id, shopSlug: slug, readDurationSec: Math.round((Date.now() - storyOpenedAt) / 1000) });
+                    }
+                    setShowStoryModal(false);
+                  }}
+                  className="mt-4 flex items-center gap-1 text-sm text-gray-400 hover:text-gray-600 transition-colors"
+                >
+                  閉じる
+                </button>
               </div>
             )}
           </div>
-        </TabsContent>
+        </section>
+      )}
 
-        {/* 食べてほしい一品タブ */}
-        <TabsContent value="menu" className="mt-4">
-          <div className="mb-4 rounded-lg bg-warm-light px-4 py-3">
-            <p className="text-xs text-muted-foreground">
-              <span className="font-medium text-foreground">{shop.owner_name}</span>さんが「ぜひ食べてほしい」と語る、想いのこもった一品たち。
-            </p>
-          </div>
-          <div className="space-y-6">
+      {/* 体験プロファイル — 来店者の声から見える魅力 */}
+      <ExperienceProfile shopSlug={slug} />
+
+      {/* 食べてほしい一品 */}
+      {shop.menus.length > 0 && (
+        <section className="border-t border-gray-100 px-4 py-5">
+          <h2 className="text-sm font-bold text-[#2C3E50] mb-3">食べてほしい一品</h2>
+          <div className="space-y-4">
             {shop.menus.map((menu) => (
-              <Card key={menu.id} className="overflow-hidden">
-                <div className="h-2 bg-gradient-to-r from-primary/60 to-primary/20" />
+              <Card key={menu.id} className="overflow-hidden border-gray-100 shadow-sm">
+                {menu.photo_url && (
+                  <div className="relative aspect-[4/3] w-full overflow-hidden">
+                    <Image src={menu.photo_url} alt={menu.name} fill className="object-cover" sizes="(max-width: 768px) 100vw, 600px" />
+                  </div>
+                )}
                 <CardContent className="p-4">
                   <div className="flex items-start justify-between">
-                    <div>
-                      <h3 className="text-lg font-bold">{menu.name}</h3>
-                      {menu.description && (
-                        <p className="mt-0.5 text-xs text-muted-foreground">{menu.description}</p>
-                      )}
-                    </div>
+                    <h3 className="text-base font-bold text-[#2C3E50]">{menu.name}</h3>
                     {menu.price && (
-                      <span className="shrink-0 rounded-full bg-primary/10 px-3 py-1 text-sm font-semibold text-primary">
+                      <span className="shrink-0 text-sm font-semibold text-[#E06A4E]">
                         ¥{menu.price.toLocaleString()}
                       </span>
                     )}
                   </div>
+                  {menu.description && (
+                    <p className="mt-1 text-xs text-gray-500">{menu.description}</p>
+                  )}
                   {menu.owner_message && (
-                    <div className="mt-3 border-l-2 border-primary/30 pl-3">
-                      <p className="text-sm leading-relaxed text-foreground/85">
-                        {menu.owner_message}
+                    <div className="mt-3 border-l-2 border-[#E06A4E]/30 pl-3">
+                      <p className="text-sm italic leading-relaxed text-[#2C3E50]/80">
+                        「{menu.owner_message}」
                       </p>
-                      <p className="mt-2 text-right text-xs text-muted-foreground">
-                        — {shop.owner_name}
-                      </p>
+                      <p className="mt-1 text-right text-xs text-gray-400">— {shop.owner_name}</p>
                     </div>
                   )}
                 </CardContent>
               </Card>
             ))}
           </div>
-        </TabsContent>
+        </section>
+      )}
 
-        {/* 店舗情報タブ */}
-        <TabsContent value="info" className="mt-4">
-          <div className="space-y-4">
-            {shop.address && (
-              <div className="flex items-start gap-3">
-                <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+      {/* 店舗情報 */}
+      <section className="border-t border-gray-100 px-4 py-5">
+        <h2 className="text-sm font-bold text-[#2C3E50] mb-3">店舗情報</h2>
+        <div className="space-y-3">
+          {/* 価格帯 */}
+          {(() => {
+            const budgetId = shop.basic_info?.budget_label_dinner ?? shop.basic_info?.budget_label_lunch;
+            const budget = budgetId ? BUDGET_LABELS.find((b) => b.id === budgetId) : null;
+            return budget ? (
+              <div className="flex items-center gap-2">
+                <span className="text-gray-400">💰</span>
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-3 py-1 text-sm font-medium text-amber-700 border border-amber-100">
+                  {budget.label}
+                  <span className="text-xs text-amber-500">({budget.range})</span>
+                </span>
+              </div>
+            ) : null;
+          })()}
+          {shop.address && (
+            <div className="flex items-start gap-3">
+              <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-gray-400" />
+              <p className="text-sm text-gray-700">{shop.address}</p>
+            </div>
+          )}
+          {hoursDisplay && (
+            <div className="flex items-start gap-3">
+              <Clock className="mt-0.5 h-4 w-4 shrink-0 text-gray-400" />
+              <div>
+                <p className="text-sm text-gray-700">{hoursDisplay}</p>
+                {shop.holidays && (
+                  <p className="text-xs text-gray-400">定休日: {shop.holidays}</p>
+                )}
+              </div>
+            </div>
+          )}
+          {shop.phone && (
+            <div className="flex items-start gap-3">
+              <Phone className="mt-0.5 h-4 w-4 shrink-0 text-gray-400" />
+              <p className="text-sm text-gray-700">{shop.phone}</p>
+            </div>
+          )}
+
+          {/* Fan count - qualitative */}
+          {fanCount > 0 && (
+            <div className="mt-2 flex items-center gap-2 text-xs text-gray-400">
+              <Heart className="h-3 w-3" />
+              <span>ファンがいます</span>
+            </div>
+          )}
+        </div>
+
+        {/* 近況更新 */}
+        {shopUpdates.length > 0 && (
+          <div className="mt-4">
+            <h3 className="mb-2 flex items-center gap-1.5 text-xs font-medium text-gray-500">
+              <Megaphone className="h-3.5 w-3.5" />
+              店主の近況
+            </h3>
+            <div className="space-y-2">
+              {shopUpdates.slice(0, 2).map(update => (
+                <div key={update.id} className="rounded-lg bg-gray-50 p-3">
+                  <p className="whitespace-pre-line text-sm leading-relaxed text-gray-700">{update.content}</p>
+                  <p className="mt-1 text-[10px] text-gray-400">
+                    {new Date(update.created_at).toLocaleDateString("ja-JP")}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </section>
+
+      {/* 予約打診 */}
+      <section className="border-t border-gray-100 px-4 py-5">
+        {reservationSent ? (
+          <div className="rounded-xl border border-green-200 bg-green-50 p-4 text-center">
+            <Check className="mx-auto h-6 w-6 text-green-600" />
+            <p className="mt-2 text-sm font-medium text-green-800">予約打診を送信しました</p>
+            <p className="mt-1 text-xs text-green-600">店主からの返答をお待ちください</p>
+          </div>
+        ) : showReservationForm ? (
+          <Card className="border-gray-100">
+            <CardContent className="space-y-3 p-4">
+              <h3 className="flex items-center gap-2 text-sm font-medium text-[#2C3E50]">
+                <CalendarClock className="h-4 w-4 text-[#E06A4E]" />
+                予約を打診する
+              </h3>
+              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <p className="text-sm font-medium">住所</p>
-                  <p className="text-sm text-muted-foreground">{shop.address}</p>
+                  <label className="mb-1 block text-xs text-gray-400">希望日</label>
+                  <Input type="date" value={reservationDate} onChange={e => setReservationDate(e.target.value)} />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs text-gray-400">希望時間</label>
+                  <Input type="text" placeholder="19:00" value={reservationTime} onChange={e => setReservationTime(e.target.value)} />
                 </div>
               </div>
-            )}
-            {hoursDisplay && (
-              <div className="flex items-start gap-3">
-                <Clock className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+              <div>
+                <label className="mb-1 block text-xs text-gray-400">人数</label>
+                <select value={reservationPartySize} onChange={e => setReservationPartySize(e.target.value)} className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm">
+                  {Array.from({ length: 10 }, (_, i) => i + 1).map(n => (
+                    <option key={n} value={n}>{n}名</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs text-gray-400">メッセージ（任意）</label>
+                <Textarea placeholder="アレルギーやご要望があればお気軽にどうぞ" value={reservationMessage} onChange={e => setReservationMessage(e.target.value)} className="h-16" maxLength={500} />
+              </div>
+              <div className="flex gap-2">
+                <Button size="sm" onClick={handleReservationSubmit} disabled={!reservationDate || !reservationTime || reservationSubmitting} className="gap-1 bg-[#E06A4E] hover:bg-[#d0593d]">
+                  <Send className="h-3 w-3" />
+                  打診を送信
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => setShowReservationForm(false)}>キャンセル</Button>
+              </div>
+            </CardContent>
+          </Card>
+        ) : (
+          <Button
+            className="w-full gap-2 rounded-xl border-[#E06A4E]/20 text-[#E06A4E] hover:bg-[#E06A4E]/5"
+            variant="outline"
+            onClick={() => {
+              if (!isAuthenticated) { router.push(`/login?next=/shops/${slug}`); return; }
+              setShowReservationForm(true);
+            }}
+          >
+            <CalendarClock className="h-4 w-4" />
+            予約を打診する
+          </Button>
+        )}
+      </section>
+
+      {/* ファンの声 - qualitative social proof */}
+      {fans.length > 0 && fans.some(f => f.push_reason) && (
+        <section className="border-t border-gray-100 px-4 py-5">
+          <div className="flex items-center gap-2 mb-3">
+            <Heart className="h-4 w-4 text-primary" />
+            <h2 className="text-sm font-bold text-[#2C3E50]">ファンの声</h2>
+            <span className="text-xs text-muted-foreground">
+              ({fanCount <= 3 ? "密かに注目" : fanCount <= 10 ? "じわじわ人気" : fanCount <= 30 ? "注目のお店" : "大人気"})
+            </span>
+          </div>
+          {displayTags.length > 0 && (
+            <p className="text-xs text-gray-500 mb-3">
+              {displayTags[0].icon} {displayTags[0].label}に共感した人たちに推されています
+            </p>
+          )}
+          <div className="space-y-2.5">
+            {fans.filter(f => f.push_reason).slice(0, 4).map(fan => (
+              <div key={fan.id} className="rounded-xl border border-orange-100/60 bg-gradient-to-r from-orange-50/50 to-amber-50/30 p-3.5">
+                <p className="text-sm leading-relaxed text-[#2C3E50]/85">
+                  &ldquo;{fan.push_reason}&rdquo;
+                </p>
+                <p className="mt-1.5 text-[11px] text-muted-foreground">
+                  {fan.nickname}さん
+                </p>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* 推しチップ */}
+      <section className="border-t border-gray-100 px-4 py-5">
+        <h2 className="text-sm font-bold text-[#2C3E50] mb-2">☕ 推しチップ</h2>
+        <p className="text-xs text-gray-500 mb-3">
+          推し店の店主に感謝の気持ちを伝えよう
+        </p>
+        <div className="flex gap-2">
+          {[100, 300, 500, 1000].map((amount) => (
+            <button
+              key={amount}
+              disabled
+              className="flex-1 rounded-xl border border-amber-200 bg-amber-50/50 py-3 text-center transition-all opacity-60 cursor-not-allowed"
+            >
+              <span className="block text-sm font-bold text-amber-700">¥{amount.toLocaleString()}</span>
+              <span className="block text-[10px] text-amber-500 mt-0.5">
+                {amount <= 100 ? "☕" : amount <= 300 ? "🍰" : amount <= 500 ? "🍽" : "🎁"}
+              </span>
+            </button>
+          ))}
+        </div>
+        <p className="mt-2.5 text-[11px] text-gray-400 text-center">
+          💳 決済機能は近日公開予定です
+        </p>
+      </section>
+
+      {/* 来店記録ボタン（推し店のみ表示） */}
+      {isOshi && (
+        <section className="border-t border-gray-100 px-4 py-4">
+          <Button
+            className="w-full gap-2 rounded-xl border-orange-200 text-[#E06A4E] hover:bg-orange-50"
+            variant="outline"
+            asChild
+          >
+            <Link href={`/diary/new?shopId=${shop.id}`}>
+              <BookOpen className="h-4 w-4" />
+              来店記録をつける
+            </Link>
+          </Button>
+        </section>
+      )}
+
+      {/* ファンクラブ */}
+      {fanClubPlan && (
+        <section className="border-t border-gray-100 px-4 py-5">
+          <h2 className="text-sm font-bold text-[#2C3E50] mb-2">💎 ファンクラブ</h2>
+          <p className="text-xs text-gray-500 mb-3">
+            月額で店主を推そう。ファンクラブ限定の特典が届く
+          </p>
+          <Card className="border-orange-100 bg-gradient-to-r from-orange-50/30 to-amber-50/20">
+            <CardContent className="p-4">
+              <div className="flex justify-between items-center">
                 <div>
-                  <p className="text-sm font-medium">営業時間</p>
-                  <p className="text-sm text-muted-foreground">{hoursDisplay}</p>
-                  {shop.holidays && (
-                    <p className="text-xs text-muted-foreground">定休日: {shop.holidays}</p>
+                  <p className="text-sm font-bold text-[#2C3E50]">{fanClubPlan.plan_name}</p>
+                  {fanClubPlan.description && (
+                    <p className="text-xs text-gray-500 mt-0.5">{fanClubPlan.description}</p>
                   )}
                 </div>
+                <p className="text-sm font-bold text-[#E06A4E]">¥{fanClubPlan.price.toLocaleString()}<span className="text-xs font-normal text-gray-400">/月</span></p>
               </div>
-            )}
-            {shop.phone && (
-              <div className="flex items-start gap-3">
-                <Phone className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-                <div>
-                  <p className="text-sm font-medium">電話番号</p>
-                  <p className="text-sm text-muted-foreground">{shop.phone}</p>
+              {Array.isArray(fanClubPlan.benefits) && fanClubPlan.benefits.length > 0 && (
+                <div className="mt-3 flex flex-wrap gap-1.5">
+                  {(fanClubPlan.benefits as string[]).map((benefit, i) => (
+                    <span key={i} className="inline-flex items-center rounded-full bg-orange-50 px-2 py-0.5 text-[11px] text-[#E06A4E]">
+                      ✓ {benefit}
+                    </span>
+                  ))}
                 </div>
-              </div>
-            )}
-          </div>
-        </TabsContent>
+              )}
+              <Button disabled className="w-full mt-3 opacity-60" size="sm" variant="outline">
+                近日公開
+              </Button>
+            </CardContent>
+          </Card>
+        </section>
+      )}
 
-        {/* ファンの声タブ */}
-        <TabsContent value="fans" className="mt-4">
-          <div className="py-8 text-center text-sm text-muted-foreground">
-            まだファンの声はありません。
-            <br />
-            最初の応援メッセージを送りませんか？
-          </div>
-        </TabsContent>
-      </Tabs>
+      {/* 共感タップはストーリー内にインライン配置済み（C-13） */}
+
+      {/* フローティング推しCTA - ストーリー展開時のみ表示 */}
+      {showStoryModal && !isOshi && (
+        <div className="fixed bottom-20 left-0 right-0 z-50 mx-auto max-w-3xl px-4 animate-in slide-in-from-bottom-4 duration-300 md:bottom-6">
+          <button
+            onClick={handleOshiToggle}
+            disabled={isTogglingOshi}
+            className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#E06A4E] py-3.5 text-sm font-medium text-white shadow-lg shadow-[#E06A4E]/30 transition-all active:scale-[0.97] hover:bg-[#d0593d]"
+          >
+            <Heart className="h-4 w-4" />
+            この店主を推す
+          </button>
+        </div>
+      )}
     </div>
   );
 }

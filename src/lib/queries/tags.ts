@@ -32,7 +32,7 @@ export async function getShopBasicInfo(shopId: string): Promise<ShopBasicInfo | 
 /** 構造化タグをDB保存（AIインタビュー完了時に呼び出す） */
 export async function saveStructuredTags(
   shopId: string,
-  tags: { kodawari: string[]; personality: string[]; scene: string[] },
+  tags: { kodawari: string[]; personality: string[]; scene: string[]; atmosphere?: string[] },
   source: string = "ai_interview"
 ): Promise<void> {
   const supabase = await createServerSupabaseClient();
@@ -53,6 +53,12 @@ export async function saveStructuredTags(
     ...tags.scene.map((v) => ({
       shop_id: shopId,
       tag_category: "scene",
+      tag_value: v,
+      source,
+    })),
+    ...(tags.atmosphere ?? []).map((v) => ({
+      shop_id: shopId,
+      tag_category: "atmosphere",
       tag_value: v,
       source,
     })),

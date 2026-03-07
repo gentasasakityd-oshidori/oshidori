@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import {
   ArrowRight,
@@ -17,6 +18,22 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+
+export const metadata: Metadata = {
+  title: "飲食店オーナー様へ",
+  description:
+    "AIインタビューであなたのお店の想いをストーリーに。発信が苦手でも大丈夫。1時間の対話だけで、こだわりが伝わるプロ品質のコンテンツが完成します。無料プランあり。",
+  openGraph: {
+    title: "飲食店オーナー様へ | オシドリ",
+    description:
+      "AIインタビューであなたのお店の想いをストーリーに。発信が苦手でも大丈夫。1時間の対話だけで、こだわりが伝わるプロ品質のコンテンツが完成します。",
+    url: "https://oshidori.vercel.app/for-shops",
+    type: "website",
+  },
+  alternates: {
+    canonical: "https://oshidori.vercel.app/for-shops",
+  },
+};
 
 const STEPS = [
   {
@@ -38,7 +55,7 @@ const STEPS = [
     icon: Users,
     title: "ファンが集まる",
     description:
-      "ストーリーを読んだユーザーが「共感タップ」や「推し登録」で応援。点数ではなく想いでつながる、新しいファンが生まれます。",
+      "ストーリーを読んだユーザーが「共感タップ」や「推し登録」で推してくれます。点数ではなく想いでつながる、新しいファンが生まれます。",
   },
 ];
 
@@ -51,7 +68,7 @@ const PLANS = [
     features: [
       "AIインタビュー 1回",
       "ストーリー掲載 1本",
-      "基本的な店舗ページ",
+      "基本店舗ページ",
       "共感タップ・推し登録",
       "QRコード生成",
     ],
@@ -60,32 +77,30 @@ const PLANS = [
   },
   {
     name: "スタンダード",
-    price: "5,000〜8,000",
+    price: "8,000",
     priceUnit: "円/月",
-    description: "本格的に集客したい方に",
+    description: "ファンとつながりたい方に",
     features: [
       "AIインタビュー 無制限",
       "ストーリー掲載 無制限",
-      "詳細アクセス解析",
-      "感情タグ分析レポート",
-      "SNS連携・自動投稿",
-      "優先サポート",
+      "PV・ファン分析",
+      "ファンへのメッセージ配信",
+      "SNSシェア機能",
     ],
     cta: "無料で始める",
     highlighted: true,
   },
   {
     name: "プレミアム",
-    price: "15,000〜20,000",
+    price: "15,000",
     priceUnit: "円/月",
-    description: "複数店舗・ブランド展開の方に",
+    description: "推しコミュニティを本格運営したい方に",
     features: [
       "スタンダードの全機能",
-      "複数店舗管理",
-      "プロライターによる編集",
-      "写真撮影サポート",
-      "専任コンサルタント",
-      "カスタムドメイン対応",
+      "予約打診管理",
+      "CRM機能（ファン行動分析）",
+      "ファンクラブ運営",
+      "データ分析レポート",
     ],
     cta: "お問い合わせ",
     highlighted: false,
@@ -282,6 +297,19 @@ export default function ForShopsPage() {
           <p className="mt-2 text-center text-sm text-muted-foreground">
             まずは無料プランからお試しいただけます
           </p>
+          {/* 無料期間バナー */}
+          <div className="mx-auto mt-6 max-w-lg rounded-xl border-2 border-primary/30 bg-gradient-to-r from-orange-50 to-amber-50 px-5 py-4 text-center">
+            <p className="text-lg font-bold text-primary">
+              🎉 リリース記念キャンペーン
+            </p>
+            <p className="mt-1 text-sm font-semibold text-[#2C3E50]">
+              2026年12月まで、すべての機能が無料！
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              スタンダード・プレミアムプランの機能もすべてお試しいただけます。
+              無料期間終了後も、フリープランは永久無料です。
+            </p>
+          </div>
           <div className="mt-8 grid gap-6 md:grid-cols-3">
             {PLANS.map((plan) => (
               <Card
@@ -330,6 +358,61 @@ export default function ForShopsPage() {
                 </CardContent>
               </Card>
             ))}
+          </div>
+        </div>
+      </section>
+
+      {/* 機能比較表 */}
+      <section className="px-4 py-12">
+        <div className="mx-auto max-w-4xl">
+          <h2 className="text-center text-xl font-bold">機能比較</h2>
+          <p className="mt-2 text-center text-sm text-muted-foreground">
+            活用度合い・利用目的に合わせてプランをお選びください
+          </p>
+          <div className="mt-8 overflow-x-auto">
+            <table className="w-full border-collapse text-sm">
+              <thead>
+                <tr className="border-b">
+                  <th className="py-3 pr-4 text-left font-medium text-muted-foreground">機能</th>
+                  <th className="px-4 py-3 text-center font-semibold">フリー</th>
+                  <th className="px-4 py-3 text-center font-semibold text-primary">スタンダード</th>
+                  <th className="px-4 py-3 text-center font-semibold">プレミアム</th>
+                </tr>
+              </thead>
+              <tbody>
+                {[
+                  { feature: "AIインタビュー", free: "1回", standard: "無制限", premium: "無制限" },
+                  { feature: "ストーリー掲載", free: "1本", standard: "無制限", premium: "無制限" },
+                  { feature: "基本店舗ページ", free: true, standard: true, premium: true },
+                  { feature: "共感タップ・推し登録", free: true, standard: true, premium: true },
+                  { feature: "QRコード生成", free: true, standard: true, premium: true },
+                  { feature: "PV・ファン分析", free: false, standard: true, premium: true },
+                  { feature: "ファンへのメッセージ配信", free: false, standard: true, premium: true },
+                  { feature: "SNSシェア機能", free: false, standard: true, premium: true },
+                  { feature: "予約打診管理", free: false, standard: false, premium: true },
+                  { feature: "CRM機能（ファン行動分析）", free: false, standard: false, premium: true },
+                  { feature: "ファンクラブ運営", free: false, standard: false, premium: true },
+                  { feature: "データ分析レポート", free: false, standard: false, premium: true },
+                ].map((row) => (
+                  <tr key={row.feature} className="border-b last:border-0">
+                    <td className="py-3 pr-4 font-medium">{row.feature}</td>
+                    {(["free", "standard", "premium"] as const).map((plan) => (
+                      <td key={plan} className="px-4 py-3 text-center">
+                        {typeof row[plan] === "boolean" ? (
+                          row[plan] ? (
+                            <CheckCircle2 className="mx-auto h-4 w-4 text-primary" />
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )
+                        ) : (
+                          <span className="text-sm font-medium">{row[plan]}</span>
+                        )}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
       </section>

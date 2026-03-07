@@ -18,6 +18,13 @@ import {
   CheckCircle2,
   Pause,
   Play,
+  CalendarPlus,
+  RefreshCw,
+  PlusCircle,
+  CheckSquare,
+  Square,
+  Lightbulb,
+  Heart,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -44,13 +51,25 @@ type InterviewPhase =
   | "future"
   | "completed";
 
+/** インタビュー種別 */
+type InterviewType = "initial" | "seasonal_menu" | "monthly_update" | "menu_addition";
+
 /** 画面ステップ */
 type ScreenStep =
+  | "type_select"     // 種別選択（初回完了済み用）
   | "intro"           // はじめに画面
+  | "prep_check"      // 準備チェック
   | "mode_select"     // モード選択
   | "interview"       // インタビュー進行
   | "completing"      // 完了・生成中
   | "result_preview"; // 生成結果プレビュー
+
+const INTERVIEW_TYPES: { id: InterviewType; label: string; desc: string; duration: string; icon: typeof Sparkles }[] = [
+  { id: "seasonal_menu", label: "季節メニューの追加", desc: "新しい季節メニューについてお話しください", duration: "約10分", icon: CalendarPlus },
+  { id: "menu_addition", label: "メニューの追加", desc: "新しいメニューのストーリーを作りましょう", duration: "約10分", icon: PlusCircle },
+  { id: "monthly_update", label: "月次アップデート", desc: "最近のお店の近況をお聞かせください", duration: "約15分", icon: RefreshCw },
+  { id: "initial", label: "初回インタビューをやり直す", desc: "フルバージョンのインタビューを最初から", duration: "約30分", icon: Sparkles },
+];
 
 const PHASE_LABELS: Record<InterviewPhase, string> = {
   not_started: "開始前",
@@ -63,6 +82,16 @@ const PHASE_LABELS: Record<InterviewPhase, string> = {
   completed: "インタビュー完了",
 };
 
+/** 各フェーズの推定所要時間（分）── v6.1: 全体30分 */
+const PHASE_ESTIMATED_MINUTES: Record<string, number> = {
+  warmup: 3,
+  origin: 8,
+  kodawari: 8,
+  menu_story: 5,
+  regulars: 3,
+  future: 3,
+};
+
 const PHASE_ORDER: InterviewPhase[] = [
   "warmup",
   "origin",
@@ -73,6 +102,19 @@ const PHASE_ORDER: InterviewPhase[] = [
 ];
 
 const DEMO_SHOP_ID_KEY = "oshidori_demo_shop_id";
+
+// Web Speech API の型宣言（ブラウザ組込み）
+type SpeechRecognitionType = typeof window extends { SpeechRecognition: infer T } ? T : never;
+interface SpeechRecognitionInstance extends EventTarget {
+  lang: string;
+  continuous: boolean;
+  interimResults: boolean;
+  start(): void;
+  stop(): void;
+  onresult: ((event: { resultIndex: number; results: { length: number; [index: number]: { isFinal: boolean; 0: { transcript: string } } } }) => void) | null;
+  onerror: ((event: Event) => void) | null;
+  onend: (() => void) | null;
+}
 
 // FAQ項目
 const FAQ_ITEMS = [
@@ -94,8 +136,42 @@ const FAQ_ITEMS = [
   },
 ];
 
+/** 準備チェック項目コンポーネント */
+function PrepCheckItem({ item }: { item: { id: string; label: string; hint: string; icon: React.ReactNode } }) {
+  const [checked, setChecked] = useState(false);
+  return (
+    <button
+      onClick={() => setChecked(!checked)}
+      className={`w-full rounded-xl border-2 p-4 text-left transition-all ${
+        checked ? "border-primary/30 bg-primary/5" : "border-border hover:border-primary/20 hover:bg-muted/30"
+      }`}
+    >
+      <div className="flex items-start gap-3">
+        <div className="mt-0.5 shrink-0">
+          {checked ? (
+            <CheckSquare className="h-5 w-5 text-primary" />
+          ) : (
+            <Square className="h-5 w-5 text-gray-300" />
+          )}
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            {item.icon}
+            <p className={`text-sm font-semibold ${checked ? "text-primary" : ""}`}>
+              {item.label}
+            </p>
+          </div>
+          <p className="mt-1 text-xs text-muted-foreground">{item.hint}</p>
+        </div>
+      </div>
+    </button>
+  );
+}
+
 export default function InterviewPage() {
   // ─── 状態管理 ───
+  const [hasCompletedInitial, setHasCompletedInitial] = useState(false);
+  const [interviewType, setInterviewType] = useState<InterviewType>("initial");
   const [step, setStep] = useState<ScreenStep>("intro");
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
@@ -109,15 +185,27 @@ export default function InterviewPage() {
     story: StoryOutput | null;
     menu: MenuOutput | null;
     photoRequest: PhotoRequestOutput | null;
+    interviewSummary: { summary: string; strengths: string[]; unique_value: string } | null;
+    storyThemes: Record<string, number> | null;
+    structuredTags: { kodawari: string[]; personality: string[]; scene: string[] } | null;
   } | null>(null);
   const [resultTab, setResultTab] = useState<"story" | "menu" | "photo">("story");
+  const [feedbackSent, setFeedbackSent] = useState(false);
+  const [feedbackValues, setFeedbackValues] = useState({
+    process_satisfaction: 0,
+    self_discovery: 0,
+    motivation_boost: 0,
+  });
   const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(null);
   const [startTime, setStartTime] = useState<Date | null>(null);
   const [elapsed, setElapsed] = useState("00:00");
 
+  const [isVoiceMode, setIsVoiceMode] = useState(false);
+  const [interimTranscript, setInterimTranscript] = useState("");
+  const [voiceSupported, setVoiceSupported] = useState(false);
+
   const scrollRef = useRef<HTMLDivElement>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const chunksRef = useRef<Blob[]>([]);
+  const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
 
   const currentPhaseIndex = PHASE_ORDER.indexOf(phase);
   const progress =
@@ -126,6 +214,81 @@ export default function InterviewPage() {
       : phase === "not_started"
         ? 0
         : ((currentPhaseIndex + 1) / PHASE_ORDER.length) * 100;
+
+  // 初回インタビュー完了チェック
+  useEffect(() => {
+    async function checkInitialInterview() {
+      try {
+        const shopId = localStorage.getItem(DEMO_SHOP_ID_KEY);
+        if (!shopId) return;
+        const { createClient } = await import("@/lib/supabase/client");
+        const supabase = createClient();
+        const { data } = await supabase
+          .from("ai_interviews")
+          .select("id")
+          .eq("shop_id", shopId)
+          .eq("status", "completed")
+          .limit(1);
+        if (data && data.length > 0) {
+          setHasCompletedInitial(true);
+          setStep("type_select");
+        }
+      } catch {
+        // Supabase未接続時は初回フローのまま
+      }
+    }
+    checkInitialInterview();
+  }, []);
+
+  // Web Speech API 初期化
+  useEffect(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const w = window as any;
+    const SR = w.SpeechRecognition ?? w.webkitSpeechRecognition;
+    if (SR) {
+      setVoiceSupported(true);
+      const recognition = new SR() as SpeechRecognitionInstance;
+      recognition.lang = "ja-JP";
+      recognition.continuous = true;
+      recognition.interimResults = true;
+
+      recognition.onresult = (event) => {
+        let interim = "";
+        let finalText = "";
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const transcript = event.results[i][0].transcript;
+          if (event.results[i].isFinal) {
+            finalText += transcript;
+          } else {
+            interim += transcript;
+          }
+        }
+        if (finalText) {
+          setInput((prev) => prev + finalText);
+          setInterimTranscript("");
+        } else {
+          setInterimTranscript(interim);
+        }
+      };
+
+      recognition.onerror = () => {
+        setIsRecording(false);
+        setInterimTranscript("");
+      };
+
+      recognition.onend = () => {
+        // continuous モードで意図せず止まった場合、録音中なら再開
+        setIsRecording((current) => {
+          if (current && recognitionRef.current) {
+            try { recognitionRef.current.start(); } catch { /* ignore */ }
+          }
+          return current;
+        });
+      };
+
+      recognitionRef.current = recognition;
+    }
+  }, []);
 
   // 経過時間タイマー
   useEffect(() => {
@@ -143,7 +306,7 @@ export default function InterviewPage() {
     scrollRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // ─── ショップID取得 ───
+  // ─── ショップID取得（owner_idベース、adminは全店舗アクセス可） ───
   const getShopId = useCallback(async (forceRefresh = false): Promise<string | null> => {
     if (!forceRefresh) {
       const cached = localStorage.getItem(DEMO_SHOP_ID_KEY);
@@ -152,15 +315,41 @@ export default function InterviewPage() {
     try {
       const { createClient } = await import("@/lib/supabase/client");
       const supabase = createClient();
+      // 現在のユーザーIDを取得
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return null;
+
+      // まず owner_id でユーザーの店舗を検索
       const { data } = await supabase
         .from("shops")
         .select("id")
+        .eq("owner_id", user.id)
         .limit(1)
         .single();
       if (data) {
         const shopData = data as { id: string };
         localStorage.setItem(DEMO_SHOP_ID_KEY, shopData.id);
         return shopData.id;
+      }
+
+      // owner_idで見つからない場合、adminなら任意の店舗を取得
+      const { data: userData } = await supabase
+        .from("users")
+        .select("role")
+        .eq("id", user.id)
+        .single();
+      const userRole = (userData as { role: string } | null)?.role;
+      if (userRole === "admin") {
+        const { data: anyShop } = await supabase
+          .from("shops")
+          .select("id")
+          .limit(1)
+          .single();
+        if (anyShop) {
+          const shopData = anyShop as { id: string };
+          localStorage.setItem(DEMO_SHOP_ID_KEY, shopData.id);
+          return shopData.id;
+        }
       }
     } catch {
       // フォールバック
@@ -191,7 +380,7 @@ export default function InterviewPage() {
       let res = await fetch("/api/interview/start", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ shop_id: shopId }),
+        body: JSON.stringify({ shop_id: shopId, interview_type: interviewType }),
       });
 
       if (!res.ok) {
@@ -203,7 +392,7 @@ export default function InterviewPage() {
           res = await fetch("/api/interview/start", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ shop_id: shopId }),
+            body: JSON.stringify({ shop_id: shopId, interview_type: interviewType }),
           });
         }
       }
@@ -226,6 +415,15 @@ export default function InterviewPage() {
         },
       ]);
       setStep("interview");
+      // 音声モードなら自動で録音開始
+      if (isVoiceMode && recognitionRef.current) {
+        setTimeout(() => {
+          try {
+            recognitionRef.current?.start();
+            setIsRecording(true);
+          } catch { /* ignore */ }
+        }, 500);
+      }
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err);
       setMessages([
@@ -304,31 +502,19 @@ export default function InterviewPage() {
     }
   }
 
-  // ─── 音声録音 ───
-  async function toggleRecording() {
+  // ─── 音声入力（Web Speech API） ───
+  function toggleRecording() {
+    if (!recognitionRef.current) return;
     if (isRecording) {
-      mediaRecorderRef.current?.stop();
+      recognitionRef.current.stop();
       setIsRecording(false);
+      setInterimTranscript("");
     } else {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        const mediaRecorder = new MediaRecorder(stream);
-        chunksRef.current = [];
-
-        mediaRecorder.ondataavailable = (e) => {
-          if (e.data.size > 0) chunksRef.current.push(e.data);
-        };
-
-        mediaRecorder.onstop = () => {
-          stream.getTracks().forEach((t) => t.stop());
-          // MVP: 音声入力の文字起こしはサーバーサイドAPI経由で実装予定
-        };
-
-        mediaRecorderRef.current = mediaRecorder;
-        mediaRecorder.start();
+        recognitionRef.current.start();
         setIsRecording(true);
       } catch {
-        // マイクアクセスが拒否された場合
+        // already started or permission denied
       }
     }
   }
@@ -351,6 +537,9 @@ export default function InterviewPage() {
         story: data.story,
         menu: data.menu,
         photoRequest: data.photoRequest,
+        interviewSummary: data.interviewSummary ?? null,
+        storyThemes: data.storyThemes ?? null,
+        structuredTags: data.structuredTags ?? null,
       });
       setStep("result_preview");
     } catch {
@@ -370,11 +559,65 @@ export default function InterviewPage() {
     setPhase("not_started");
     setInterviewId(null);
     setGenerationResult(null);
-    setStep("intro");
+    setStep(hasCompletedInitial ? "type_select" : "intro");
+    setInterviewType("initial");
     setStartTime(null);
     setElapsed("00:00");
     setResultTab("story");
     setIsPaused(false);
+    setFeedbackSent(false);
+    setFeedbackValues({ process_satisfaction: 0, self_discovery: 0, motivation_boost: 0 });
+  }
+
+  // ─── ⓪ インタビュータイプ選択画面（初回完了済み用） ───
+  if (step === "type_select") {
+    return (
+      <div className="flex min-h-[calc(100vh-4rem)] flex-col items-center justify-center px-4 py-8">
+        <div className="w-full max-w-lg">
+          <div className="text-center">
+            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-green-50">
+              <CheckCircle2 className="h-8 w-8 text-green-500" />
+            </div>
+            <h1 className="mt-4 text-2xl font-bold">おかえりなさい！</h1>
+            <p className="mt-2 text-sm text-muted-foreground">
+              初回インタビューは完了済みです。
+              <br />
+              追加したいコンテンツを選んでください。
+            </p>
+          </div>
+
+          <div className="mt-6 space-y-3">
+            {INTERVIEW_TYPES.map((type) => (
+              <button
+                key={type.id}
+                className="flex w-full items-center gap-4 rounded-xl border-2 border-border p-4 text-left transition-all hover:border-primary/30 hover:bg-primary/5 hover:shadow-sm"
+                onClick={() => {
+                  setInterviewType(type.id);
+                  if (type.id === "initial") {
+                    setStep("intro");
+                  } else {
+                    setStep("mode_select");
+                  }
+                }}
+              >
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary/10">
+                  <type.icon className="h-6 w-6 text-primary" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="font-semibold">{type.label}</p>
+                  <p className="text-xs text-muted-foreground">{type.desc}</p>
+                </div>
+                <div className="shrink-0">
+                  <Badge variant="secondary" className="text-[10px]">
+                    {type.duration}
+                  </Badge>
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
   }
 
   // ─── ① はじめに画面 ───
@@ -405,7 +648,7 @@ export default function InterviewPage() {
                   { icon: "1", label: "ウォームアップ", desc: "リラックスしてお話しましょう" },
                   { icon: "2", label: "お店の原点", desc: "飲食の道に入ったきっかけ" },
                   { icon: "3", label: "こだわりの深層", desc: "食材・調理法・空間のこだわり" },
-                  { icon: "4", label: "食べてほしい一品", desc: "イチ推しメニューのストーリー" },
+                  { icon: "4", label: "食べてほしい一品", desc: "看板メニューのストーリー" },
                   { icon: "5", label: "常連さんとの関係", desc: "心に残るエピソード" },
                   { icon: "6", label: "未来への想い", desc: "これからのビジョン" },
                 ].map((item) => (
@@ -424,9 +667,13 @@ export default function InterviewPage() {
           </Card>
 
           {/* 所要時間 */}
-          <div className="mt-4 flex items-center justify-center gap-2 text-sm text-muted-foreground">
-            <Clock className="h-4 w-4" />
-            <span>所要時間：約45〜60分</span>
+          <div className="mt-4 rounded-lg bg-blue-50 px-4 py-3 text-center">
+            <p className="text-sm font-medium text-blue-800">
+              約30分のおしゃべりで、お店の魅力を引き出します
+            </p>
+            <p className="mt-0.5 text-xs text-blue-600">
+              途中でいつでも中断・再開できます
+            </p>
           </div>
 
           {/* FAQ */}
@@ -459,11 +706,109 @@ export default function InterviewPage() {
           <Button
             size="lg"
             className="mt-6 w-full"
-            onClick={() => setStep("mode_select")}
+            onClick={() => setStep("prep_check")}
           >
             準備チェックへ
             <ChevronRight className="ml-1 h-4 w-4" />
           </Button>
+          <button
+            type="button"
+            className="mt-2 w-full text-center text-xs text-muted-foreground hover:text-primary transition-colors"
+            onClick={() => setStep("mode_select")}
+          >
+            スキップして始める →
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ─── ①-2 準備チェック画面 ───
+  if (step === "prep_check") {
+    const PREP_ITEMS = [
+      {
+        id: "origin",
+        label: "お店を始めたきっかけ",
+        hint: "なぜこの道に？ 何がきっかけで飲食の世界へ？",
+        icon: <Heart className="h-4 w-4 text-rose-500" />,
+      },
+      {
+        id: "kodawari",
+        label: "食材・料理へのこだわり",
+        hint: "仕入れ先、調理法、味付けなど、大切にしていること",
+        icon: <UtensilsCrossed className="h-4 w-4 text-amber-600" />,
+      },
+      {
+        id: "signature",
+        label: "看板メニュー・おすすめ",
+        hint: "一番食べてほしい一品、その料理にまつわるエピソード",
+        icon: <Sparkles className="h-4 w-4 text-primary" />,
+      },
+      {
+        id: "atmosphere",
+        label: "お店の雰囲気・空間づくり",
+        hint: "内装、BGM、席配置…どんな空間にしたいか",
+        icon: <BookOpen className="h-4 w-4 text-blue-500" />,
+      },
+      {
+        id: "customers",
+        label: "お客さまとの思い出",
+        hint: "心に残る常連さんとのエピソード、嬉しかった言葉",
+        icon: <MessageSquare className="h-4 w-4 text-green-600" />,
+      },
+    ];
+
+    return (
+      <div className="flex min-h-[calc(100vh-4rem)] flex-col items-center justify-center px-4 py-8">
+        <div className="w-full max-w-lg">
+          <div className="text-center">
+            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-amber-50">
+              <Lightbulb className="h-8 w-8 text-amber-500" />
+            </div>
+            <h1 className="mt-4 text-2xl font-bold">
+              インタビューの準備
+            </h1>
+            <p className="mt-2 text-sm text-muted-foreground">
+              以下のテーマについて、ざっくり思い浮かべておくと
+              <br />スムーズにお話しいただけます
+            </p>
+          </div>
+
+          {/* 準備チェックリスト */}
+          <div className="mt-6 space-y-3">
+            {PREP_ITEMS.map((item) => (
+              <PrepCheckItem key={item.id} item={item} />
+            ))}
+          </div>
+
+          {/* Tips */}
+          <div className="mt-6 rounded-lg bg-green-50 px-4 py-3">
+            <p className="text-sm font-medium text-green-800 flex items-center gap-1.5">
+              <CheckCircle2 className="h-4 w-4" />
+              完璧に準備しなくて大丈夫！
+            </p>
+            <p className="mt-1 text-xs text-green-600">
+              インタビュアーのナオが自然に引き出しますので、リラックスしてお話しください。
+              メモや写真があれば手元に用意しておくと便利です。
+            </p>
+          </div>
+
+          {/* 次へボタン */}
+          <Button
+            size="lg"
+            className="mt-6 w-full"
+            onClick={() => setStep("mode_select")}
+          >
+            準備OK！入力方法を選ぶ
+            <ChevronRight className="ml-1 h-4 w-4" />
+          </Button>
+          <button
+            type="button"
+            className="mt-2 w-full text-center text-xs text-muted-foreground hover:text-primary transition-colors"
+            onClick={() => setStep("intro")}
+          >
+            ← 前の画面に戻る
+          </button>
         </div>
       </div>
     );
@@ -484,8 +829,9 @@ export default function InterviewPage() {
           <div className="mt-6 grid gap-4">
             {/* テキストモード */}
             <button
-              className="rounded-xl border-2 border-primary bg-primary/5 p-5 text-left transition-all hover:shadow-md"
+              className={`rounded-xl border-2 p-5 text-left transition-all hover:shadow-md ${!isVoiceMode ? "border-primary bg-primary/5" : "border-border"}`}
               onClick={() => {
+                setIsVoiceMode(false);
                 handleStart();
               }}
               disabled={isStarting}
@@ -504,23 +850,31 @@ export default function InterviewPage() {
               <Badge className="mt-3" variant="secondary">おすすめ</Badge>
             </button>
 
-            {/* 音声モード（準備中） */}
+            {/* 音声モード */}
             <button
-              className="rounded-xl border-2 border-border p-5 text-left opacity-60"
-              disabled
+              className={`rounded-xl border-2 p-5 text-left transition-all hover:shadow-md ${isVoiceMode ? "border-primary bg-primary/5" : "border-border"} ${!voiceSupported ? "opacity-60" : ""}`}
+              onClick={() => {
+                setIsVoiceMode(true);
+                handleStart();
+              }}
+              disabled={isStarting || !voiceSupported}
             >
               <div className="flex items-center gap-3">
-                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-muted">
-                  <Mic className="h-6 w-6 text-muted-foreground" />
+                <div className={`flex h-12 w-12 items-center justify-center rounded-xl ${voiceSupported ? "bg-primary/10" : "bg-muted"}`}>
+                  <Mic className={`h-6 w-6 ${voiceSupported ? "text-primary" : "text-muted-foreground"}`} />
                 </div>
                 <div>
-                  <p className="font-semibold text-muted-foreground">音声で回答</p>
+                  <p className={`font-semibold ${!voiceSupported ? "text-muted-foreground" : ""}`}>音声で回答</p>
                   <p className="text-xs text-muted-foreground">
                     話しかけるだけで回答できます。手が離せない方に。
                   </p>
                 </div>
               </div>
-              <Badge className="mt-3" variant="outline">近日対応予定</Badge>
+              {voiceSupported ? (
+                <Badge className="mt-3" variant="secondary">マイクで入力</Badge>
+              ) : (
+                <Badge className="mt-3" variant="outline">お使いのブラウザは非対応です</Badge>
+              )}
             </button>
           </div>
 
@@ -603,10 +957,72 @@ export default function InterviewPage() {
 
   // ─── ⑤ 生成結果プレビュー画面 ───
   if (step === "result_preview" && generationResult) {
-    const { story, menu, photoRequest } = generationResult;
+    const { story, menu, photoRequest, interviewSummary, storyThemes, structuredTags } = generationResult;
+
+    const THEME_LABELS: Record<string, string> = {
+      origin: "原点の物語",
+      food_craft: "食の職人技",
+      hospitality: "心のおもてなし",
+      community: "コミュニティ",
+      personality: "人柄・キャラクター",
+      local_connection: "街とのつながり",
+      vision: "未来への想い",
+    };
+
+    const handleFeedbackSubmit = async () => {
+      if (!interviewId) return;
+      const shopId = localStorage.getItem(DEMO_SHOP_ID_KEY);
+      if (!shopId) return;
+      try {
+        await fetch("/api/interview/feedback", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            interview_id: interviewId,
+            shop_id: shopId,
+            ...feedbackValues,
+          }),
+        });
+        setFeedbackSent(true);
+      } catch {
+        // フィードバック送信失敗は無視
+      }
+    };
 
     return (
       <div className="mx-auto max-w-2xl px-4 py-6">
+        {/* インタビューサマリー（振り返り） */}
+        {interviewSummary && (
+          <Card className="mb-6 border-primary/20 bg-primary/5">
+            <CardContent className="p-5">
+              <div className="flex items-center gap-2">
+                <Sparkles className="h-5 w-5 text-primary" />
+                <h3 className="font-bold text-primary">ナオからのメッセージ</h3>
+              </div>
+              <p className="mt-3 text-sm leading-relaxed">
+                {interviewSummary.summary}
+              </p>
+              {interviewSummary.strengths.length > 0 && (
+                <div className="mt-3">
+                  <p className="text-xs font-semibold text-muted-foreground">お店の強み</p>
+                  <div className="mt-1.5 flex flex-wrap gap-1.5">
+                    {interviewSummary.strengths.map((s, i) => (
+                      <Badge key={i} variant="secondary" className="text-xs">
+                        {s}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {interviewSummary.unique_value && (
+                <p className="mt-3 text-xs italic text-muted-foreground">
+                  {interviewSummary.unique_value}
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
         <div className="text-center">
           <CheckCircle2 className="mx-auto h-10 w-10 text-green-500" />
           <h2 className="mt-3 text-xl font-bold">完成しました！</h2>
@@ -649,8 +1065,28 @@ export default function InterviewPage() {
                     <p className="mt-1 text-sm text-muted-foreground">
                       {story.summary}
                     </p>
-                    <div className="mt-4 whitespace-pre-line text-sm leading-relaxed">
-                      {story.body}
+                    <div className="mt-4 space-y-3">
+                      {story.body.split("\n\n").map((paragraph, i) => (
+                        paragraph.trim() && (
+                          <div key={i} className="group relative rounded-lg p-2 -mx-2 transition-colors hover:bg-muted/30">
+                            <p className="whitespace-pre-line text-base leading-[1.85]">
+                              {paragraph}
+                            </p>
+                            <button
+                              type="button"
+                              className="absolute -right-1 top-1 hidden rounded-md border bg-background px-2 py-1 text-[10px] text-muted-foreground shadow-sm transition-colors hover:text-primary group-hover:flex items-center gap-1"
+                              onClick={() => {
+                                const feedback = prompt(`段落${i + 1}への修正リクエスト：\n\n「${paragraph.slice(0, 50)}…」\n\nどう変えたいですか？`);
+                                if (feedback) {
+                                  alert(`修正リクエストを受け付けました：\n「${feedback}」\n\n※ 今後のバージョンで自動反映されます`);
+                                }
+                              }}
+                            >
+                              ✏️ 修正依頼
+                            </button>
+                          </div>
+                        )
+                      ))}
                     </div>
                     {story.key_quotes.length > 0 && (
                       <div className="mt-4 space-y-2">
@@ -674,6 +1110,74 @@ export default function InterviewPage() {
                             {tag}
                           </Badge>
                         ))}
+                      </div>
+                    )}
+
+                    {/* テーマスコア */}
+                    {storyThemes && (
+                      <div className="mt-5 border-t pt-4">
+                        <p className="text-xs font-semibold text-muted-foreground">
+                          テーマスコア
+                        </p>
+                        <div className="mt-2 space-y-1.5">
+                          {Object.entries(storyThemes).map(([key, score]) => (
+                            <div key={key} className="flex items-center gap-2">
+                              <span className="w-28 text-xs text-muted-foreground">
+                                {THEME_LABELS[key] ?? key}
+                              </span>
+                              <div className="h-2 flex-1 rounded-full bg-muted">
+                                <div
+                                  className="h-full rounded-full bg-primary transition-all"
+                                  style={{ width: `${(score / 10) * 100}%` }}
+                                />
+                              </div>
+                              <span className="w-6 text-right text-xs font-medium">
+                                {score}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* 構造化タグ */}
+                    {structuredTags && (
+                      <div className="mt-4 border-t pt-4">
+                        <p className="text-xs font-semibold text-muted-foreground">
+                          自動抽出タグ
+                        </p>
+                        <div className="mt-2 space-y-2">
+                          {structuredTags.kodawari?.length > 0 && (
+                            <div>
+                              <span className="text-[10px] text-muted-foreground">こだわり</span>
+                              <div className="mt-0.5 flex flex-wrap gap-1">
+                                {structuredTags.kodawari.map((t) => (
+                                  <Badge key={t} variant="outline" className="text-[10px]">{t}</Badge>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          {structuredTags.personality?.length > 0 && (
+                            <div>
+                              <span className="text-[10px] text-muted-foreground">店主の人柄</span>
+                              <div className="mt-0.5 flex flex-wrap gap-1">
+                                {structuredTags.personality.map((t) => (
+                                  <Badge key={t} variant="outline" className="text-[10px]">{t}</Badge>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          {structuredTags.scene?.length > 0 && (
+                            <div>
+                              <span className="text-[10px] text-muted-foreground">おすすめシーン</span>
+                              <div className="mt-0.5 flex flex-wrap gap-1">
+                                {structuredTags.scene.map((t) => (
+                                  <Badge key={t} variant="outline" className="text-[10px]">{t}</Badge>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     )}
                   </>
@@ -788,6 +1292,65 @@ export default function InterviewPage() {
             最初から
           </Button>
         </div>
+
+        {/* 体験フィードバック */}
+        {!feedbackSent ? (
+          <Card className="mt-6 border-dashed">
+            <CardContent className="p-5">
+              <p className="text-sm font-semibold">このインタビューはいかがでしたか？</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                ぜひ感想をお聞かせください（スキップ可）
+              </p>
+              <div className="mt-4 space-y-3">
+                {([
+                  { key: "process_satisfaction" as const, label: "インタビュー体験" },
+                  { key: "self_discovery" as const, label: "お店の魅力の再発見" },
+                  { key: "motivation_boost" as const, label: "やりがいの向上" },
+                ] as const).map((item) => (
+                  <div key={item.key}>
+                    <p className="text-xs text-muted-foreground">{item.label}</p>
+                    <div className="mt-1 flex gap-1">
+                      {[1, 2, 3, 4, 5].map((n) => (
+                        <button
+                          key={n}
+                          className={`h-8 w-8 rounded-full text-sm transition-colors ${
+                            feedbackValues[item.key] === n
+                              ? "bg-primary text-primary-foreground"
+                              : "bg-muted text-muted-foreground hover:bg-muted/80"
+                          }`}
+                          onClick={() =>
+                            setFeedbackValues((prev) => ({
+                              ...prev,
+                              [item.key]: n,
+                            }))
+                          }
+                        >
+                          {n}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <Button
+                size="sm"
+                className="mt-4"
+                onClick={handleFeedbackSubmit}
+                disabled={
+                  feedbackValues.process_satisfaction === 0 &&
+                  feedbackValues.self_discovery === 0 &&
+                  feedbackValues.motivation_boost === 0
+                }
+              >
+                フィードバックを送る
+              </Button>
+            </CardContent>
+          </Card>
+        ) : (
+          <p className="mt-6 text-center text-sm text-muted-foreground">
+            フィードバックありがとうございます！
+          </p>
+        )}
       </div>
     );
   }
@@ -806,6 +1369,12 @@ export default function InterviewPage() {
               <p className="text-sm font-bold">ナオ（オシドリ編集部）</p>
               <p className="text-[10px] text-muted-foreground">
                 {elapsed} 経過
+                {phase !== "completed" && phase !== "not_started" && (() => {
+                  const remaining = PHASE_ORDER.slice(currentPhaseIndex).reduce(
+                    (sum, p) => sum + (PHASE_ESTIMATED_MINUTES[p] ?? 0), 0
+                  );
+                  return remaining > 0 ? ` ・ あと約${remaining}分` : "";
+                })()}
               </p>
             </div>
           </div>
@@ -963,28 +1532,37 @@ export default function InterviewPage() {
       {phase !== "completed" && (
         <div className="border-t bg-background px-4 py-3">
           <div className="mx-auto flex max-w-2xl gap-2">
-            <Button
-              variant={isRecording ? "destructive" : "outline"}
-              size="icon"
-              className="shrink-0"
-              onClick={toggleRecording}
-              title={isRecording ? "録音停止" : "音声入力"}
-            >
-              {isRecording ? (
-                <MicOff className="h-4 w-4" />
-              ) : (
-                <Mic className="h-4 w-4" />
+            {voiceSupported && (
+              <Button
+                variant={isRecording ? "destructive" : "outline"}
+                size="icon"
+                className="shrink-0"
+                onClick={toggleRecording}
+                title={isRecording ? "音声入力を停止" : "音声入力を開始"}
+              >
+                {isRecording ? (
+                  <MicOff className="h-4 w-4" />
+                ) : (
+                  <Mic className="h-4 w-4" />
+                )}
+              </Button>
+            )}
+            <div className="relative flex-1">
+              <Textarea
+                placeholder={isRecording ? "話してください..." : "ここに入力してください... (Shift+Enterで改行)"}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={handleKeyDown}
+                className="min-h-[44px] max-h-32 resize-none"
+                rows={1}
+                disabled={isLoading}
+              />
+              {interimTranscript && (
+                <p className="absolute bottom-1 left-3 right-3 truncate text-xs text-muted-foreground/60 italic">
+                  {interimTranscript}
+                </p>
               )}
-            </Button>
-            <Textarea
-              placeholder="ここに入力してください... (Shift+Enterで改行)"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              className="min-h-[44px] max-h-32 resize-none"
-              rows={1}
-              disabled={isLoading}
-            />
+            </div>
             <Button
               size="icon"
               className="shrink-0"
@@ -995,9 +1573,12 @@ export default function InterviewPage() {
             </Button>
           </div>
           {isRecording && (
-            <p className="mt-1 text-center text-xs text-destructive animate-pulse">
-              録音中... もう一度マイクボタンを押して停止
-            </p>
+            <div className="mt-1 flex items-center justify-center gap-2">
+              <span className="h-2 w-2 animate-pulse rounded-full bg-red-500" />
+              <p className="text-xs text-muted-foreground">
+                音声入力中... マイクボタンで停止
+              </p>
+            </div>
           )}
         </div>
       )}

@@ -3,10 +3,18 @@ import { createServerSupabaseClient } from "@/lib/supabase/server";
 
 export async function POST(request: Request) {
   try {
-    const { shop_id } = await request.json();
+    const { shop_id, push_reason } = await request.json();
     if (!shop_id) {
       return NextResponse.json(
         { error: "shop_id is required" },
+        { status: 400 }
+      );
+    }
+
+    // shop_id バリデーション（型チェック + 長さ制限）
+    if (typeof shop_id !== "string" || shop_id.length === 0 || shop_id.length > 128) {
+      return NextResponse.json(
+        { error: "Invalid shop_id" },
         { status: 400 }
       );
     }
@@ -39,10 +47,14 @@ export async function POST(request: Request) {
         .eq("id", (existing as { id: string }).id);
     } else {
       // Add oshi (toggle on)
-      await supabase.from("oshi_shops").insert({
+      const insertData: Record<string, unknown> = {
         user_id: user.id,
         shop_id,
-      } as never);
+      };
+      if (push_reason && typeof push_reason === "string" && push_reason.length <= 50) {
+        insertData.push_reason = push_reason;
+      }
+      await supabase.from("oshi_shops").insert(insertData as never);
     }
 
     // Return updated count

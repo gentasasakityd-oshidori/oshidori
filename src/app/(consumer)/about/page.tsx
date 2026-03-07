@@ -55,8 +55,8 @@ export default function AboutPage() {
               <MessageCircle className="h-8 w-8 text-primary" />
               <h3 className="mt-3 font-semibold">推し文化</h3>
               <p className="mt-2 text-sm text-muted-foreground">
-                「推し店」として登録し、お気に入りのお店を応援。
-                アイドルの推し活のように、飲食店を推す文化を作ります。
+                推し登録して、好きなお店を推す。
+                共感でつながる、飲食店を推す文化を作ります。
               </p>
             </div>
             <div className="rounded-lg border p-6">

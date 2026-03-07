@@ -1,8 +1,26 @@
+import type { Metadata } from "next";
 import Link from "next/link";
+import Image from "next/image";
 import { Heart, MessageCircle } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { getPublishedStories } from "@/lib/queries";
+
+export const metadata: Metadata = {
+  title: "ストーリー一覧",
+  description:
+    "飲食店オーナーの想いとこだわりが詰まったストーリー。AIインタビューで引き出された、お店の魅力を読んでみよう。",
+  openGraph: {
+    title: "ストーリー一覧 | オシドリ",
+    description:
+      "飲食店オーナーの想いとこだわりが詰まったストーリー。AIインタビューで引き出された、お店の魅力を読んでみよう。",
+    url: "https://oshidori.vercel.app/stories",
+    type: "website",
+  },
+  alternates: {
+    canonical: "https://oshidori.vercel.app/stories",
+  },
+};
 
 export default async function StoriesPage() {
   const allStories = await getPublishedStories();
@@ -23,7 +41,17 @@ export default async function StoriesPage() {
               key={story.id}
               className="overflow-hidden transition-all duration-200 hover:shadow-lg hover:-translate-y-1"
             >
-              <div className="h-40 bg-gradient-to-br from-warm to-secondary" />
+              <div className="relative h-40 bg-gradient-to-br from-warm to-secondary">
+                {story.shop.image_url && (
+                  <Image
+                    src={story.shop.image_url}
+                    alt={story.shop.name}
+                    fill
+                    className="object-cover"
+                    sizes="(max-width: 768px) 100vw, 400px"
+                  />
+                )}
+              </div>
               <CardContent className="p-4">
                 <div className="flex items-center gap-2">
                   <Badge variant="secondary" className="text-xs">
@@ -50,7 +78,7 @@ export default async function StoriesPage() {
                 <div className="mt-3 flex items-center gap-4 text-xs text-muted-foreground">
                   <span className="flex items-center gap-1">
                     <Heart className="h-3 w-3" />
-                    推し
+                    推し店
                   </span>
                   <span className="flex items-center gap-1">
                     <MessageCircle className="h-3 w-3" />

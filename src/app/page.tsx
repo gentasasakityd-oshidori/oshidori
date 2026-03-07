@@ -33,7 +33,7 @@ export default function PortalPage() {
           <div className="text-center">
             <h2 className="text-lg font-bold text-gray-900">消費者向けトップ</h2>
             <p className="mt-1 text-xs text-gray-500">
-              推しの飲食店を探す・ストーリーを読む
+              推し店を探す・ストーリーを読む
             </p>
           </div>
         </Link>

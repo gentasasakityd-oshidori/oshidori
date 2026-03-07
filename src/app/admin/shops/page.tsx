@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { Eye, EyeOff, Heart, BookOpen, Loader2, ExternalLink } from "lucide-react";
+import { Eye, EyeOff, Heart, BookOpen, Loader2, ExternalLink, Activity } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -13,6 +13,29 @@ type AdminShop = Shop & {
   oshi_count: number;
   stories: { id: string; title: string; status: string }[];
 };
+
+/** 店舗ヘルススコア算出 (0-100) */
+function calcHealthScore(shop: AdminShop): { score: number; label: string; color: string } {
+  let score = 0;
+  // 公開状態 (20pt)
+  if (shop.is_published) score += 20;
+  // ストーリーあり (25pt)
+  const publishedStories = shop.stories.filter(s => s.status === "published").length;
+  if (publishedStories >= 1) score += 25;
+  // 応援者数 (25pt: 5人以上で満点)
+  score += Math.min(25, Math.floor((shop.oshi_count / 5) * 25));
+  // ストーリー数 (15pt: 2件以上で満点)
+  score += Math.min(15, Math.floor((shop.story_count / 2) * 15));
+  // プロフィール完成度 (15pt)
+  if (shop.name) score += 5;
+  if (shop.area) score += 5;
+  if (shop.category) score += 5;
+
+  score = Math.min(score, 100);
+  const label = score >= 80 ? "良好" : score >= 50 ? "改善余地" : "要対応";
+  const color = score >= 80 ? "text-green-600" : score >= 50 ? "text-yellow-600" : "text-red-600";
+  return { score, label, color };
+}
 
 export default function AdminShopsPage() {
   const [shops, setShops] = useState<AdminShop[]>([]);
@@ -109,8 +132,17 @@ export default function AdminShopsPage() {
                     </span>
                     <span className="flex items-center gap-1">
                       <Heart className="h-3 w-3" />
-                      推し {shop.oshi_count}
+                      ファン {shop.oshi_count}
                     </span>
+                    {(() => {
+                      const health = calcHealthScore(shop);
+                      return (
+                        <span className={`flex items-center gap-1 font-medium ${health.color}`}>
+                          <Activity className="h-3 w-3" />
+                          {health.label} {health.score}点
+                        </span>
+                      );
+                    })()}
                   </div>
                 </div>
 

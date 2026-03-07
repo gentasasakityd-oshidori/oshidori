@@ -15,16 +15,24 @@ export interface Database {
           slug: string;
           name: string;
           owner_name: string;
+          owner_real_name: string | null;
           area: string;
           category: string;
           description: string | null;
           address: string | null;
+          address_prefecture: string | null;
+          address_city: string | null;
+          address_street: string | null;
+          address_building: string | null;
           phone: string | null;
           hours: Json | null;
           holidays: string | null;
           image_url: string | null;
           owner_image_url: string | null;
           is_published: boolean;
+          tabelog_url: string | null;
+          gmb_url: string | null;
+          website_url: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -33,16 +41,24 @@ export interface Database {
           slug: string;
           name: string;
           owner_name: string;
+          owner_real_name?: string | null;
           area: string;
           category: string;
           description?: string | null;
           address?: string | null;
+          address_prefecture?: string | null;
+          address_city?: string | null;
+          address_street?: string | null;
+          address_building?: string | null;
           phone?: string | null;
           hours?: Json | null;
           holidays?: string | null;
           image_url?: string | null;
           owner_image_url?: string | null;
           is_published?: boolean;
+          tabelog_url?: string | null;
+          gmb_url?: string | null;
+          website_url?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -51,16 +67,24 @@ export interface Database {
           slug?: string;
           name?: string;
           owner_name?: string;
+          owner_real_name?: string | null;
           area?: string;
           category?: string;
           description?: string | null;
           address?: string | null;
+          address_prefecture?: string | null;
+          address_city?: string | null;
+          address_street?: string | null;
+          address_building?: string | null;
           phone?: string | null;
           hours?: Json | null;
           holidays?: string | null;
           image_url?: string | null;
           owner_image_url?: string | null;
           is_published?: boolean;
+          tabelog_url?: string | null;
+          gmb_url?: string | null;
+          website_url?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -75,6 +99,11 @@ export interface Database {
           key_quotes: Json | null;
           emotion_tags: Json | null;
           story_themes: Json | null;
+          catchcopy_primary: string | null;
+          catchcopy_alt_1: string | null;
+          catchcopy_alt_2: string | null;
+          highlight: string | null;
+          hook_sentence: string | null;
           status: string;
           published_at: string | null;
           created_at: string;
@@ -88,6 +117,11 @@ export interface Database {
           key_quotes?: Json | null;
           emotion_tags?: Json | null;
           story_themes?: Json | null;
+          catchcopy_primary?: string | null;
+          catchcopy_alt_1?: string | null;
+          catchcopy_alt_2?: string | null;
+          highlight?: string | null;
+          hook_sentence?: string | null;
           status?: string;
           published_at?: string | null;
           created_at?: string;
@@ -101,6 +135,11 @@ export interface Database {
           key_quotes?: Json | null;
           emotion_tags?: Json | null;
           story_themes?: Json | null;
+          catchcopy_primary?: string | null;
+          catchcopy_alt_1?: string | null;
+          catchcopy_alt_2?: string | null;
+          highlight?: string | null;
+          hook_sentence?: string | null;
           status?: string;
           published_at?: string | null;
           created_at?: string;
@@ -403,6 +442,7 @@ export interface Database {
           id: string;
           shop_id: string;
           nearest_station: string | null;
+          walking_minutes: number | null;
           latitude: number | null;
           longitude: number | null;
           budget_lunch_min: number | null;
@@ -420,6 +460,7 @@ export interface Database {
           id?: string;
           shop_id: string;
           nearest_station?: string | null;
+          walking_minutes?: number | null;
           latitude?: number | null;
           longitude?: number | null;
           budget_lunch_min?: number | null;
@@ -437,6 +478,7 @@ export interface Database {
           id?: string;
           shop_id?: string;
           nearest_station?: string | null;
+          walking_minutes?: number | null;
           latitude?: number | null;
           longitude?: number | null;
           budget_lunch_min?: number | null;
@@ -447,6 +489,44 @@ export interface Database {
           budget_label_dinner?: string | null;
           genre_primary?: string | null;
           genre_secondary?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
+      fan_club_plans: {
+        Row: {
+          id: string;
+          shop_id: string;
+          plan_name: string;
+          price: number;
+          description: string | null;
+          benefits: Json;
+          template_base: string;
+          is_active: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          shop_id: string;
+          plan_name: string;
+          price: number;
+          description?: string | null;
+          benefits?: Json;
+          template_base: string;
+          is_active?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          shop_id?: string;
+          plan_name?: string;
+          price?: number;
+          description?: string | null;
+          benefits?: Json;
+          template_base?: string;
+          is_active?: boolean;
           created_at?: string;
           updated_at?: string;
         };
@@ -472,11 +552,63 @@ export type ShopMessage = Database["public"]["Tables"]["shop_messages"]["Row"];
 export type MessageRead = Database["public"]["Tables"]["message_reads"]["Row"];
 export type ShopStructuredTag = Database["public"]["Tables"]["shop_structured_tags"]["Row"];
 export type ShopBasicInfo = Database["public"]["Tables"]["shop_basic_info"]["Row"];
+export type FanClubPlan = Database["public"]["Tables"]["fan_club_plans"]["Row"];
 
 // タグカテゴリの型定義
 export type TagCategory = "kodawari" | "personality" | "scene" | "genre" | "budget";
 export type TagSource = "ai_interview" | "fan_emotion" | "manual";
 export type MessageTarget = "all_fans" | "specific_fans";
+
+// display_tagsテーブルの行型
+export interface DisplayTagRow {
+  id: string;
+  shop_id: string;
+  icon: string;
+  label: string;
+  source_tag_id: string | null;
+  priority: number;
+  created_at: string;
+}
+
+// 来店記録
+export interface VisitRecord {
+  id: string;
+  user_id: string;
+  shop_id: string;
+  visited_at: string;
+  mood_tag: string | null;       // 後方互換（単一）
+  mood_tags: string[] | null;    // 複数選択対応
+  memo: string | null;
+  photo_url: string | null;
+  is_public: boolean;
+  created_at: string;
+}
+
+// ファンレター
+export interface FanLetter {
+  id: string;
+  visit_record_id: string | null;
+  user_id: string;
+  shop_id: string;
+  content: string;
+  is_anonymous: boolean;
+  read_at: string | null;
+  created_at: string;
+}
+
+// UI用: 来店記録+店舗名
+export interface VisitRecordWithShop extends VisitRecord {
+  shop_name: string;
+  shop_slug: string;
+  shop_image_url: string | null;
+}
+
+// UI用: ファンレター+送信者情報
+export interface FanLetterWithUser extends FanLetter {
+  user_nickname: string | null;
+  user_avatar_url: string | null;
+  mood_tag: string | null;
+}
 
 // UI用の複合型（ダミーデータ・クエリ結果共通）
 export type ShopWithRelations = Shop & {
@@ -485,4 +617,7 @@ export type ShopWithRelations = Shop & {
   _count: { oshi: number; empathy: number };
   basic_info?: ShopBasicInfo | null;
   structured_tags?: ShopStructuredTag[];
+  display_tags?: DisplayTagRow[];
+  fan_club_plan?: FanClubPlan | null;
+  mood_scores?: Array<{ mood_tag: string; score: number }>;
 };

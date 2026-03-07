@@ -1,14 +1,18 @@
 import { NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
-import { getOpenAIClient } from "@/lib/ai/client";
+import { createChatCompletion } from "@/lib/ai/client";
 import {
   buildInterviewSystemPrompt,
   buildMonthlyUpdatePrompt,
   buildMenuAdditionPrompt,
   buildSeasonalMenuPrompt,
 } from "@/lib/prompts";
-import { logApiUsage, extractUsage } from "@/lib/ai/usage-logger";
-import type { InterviewType } from "@/types/ai";
+import { logApiUsage } from "@/lib/ai/usage-logger";
+import {
+  getInterviewContext,
+  mergeContextToEngagement,
+} from "@/lib/ai/interview-context";
+import type { InterviewType, EngagementContext } from "@/types/ai";
 import type { Shop } from "@/types/database";
 
 const VALID_INTERVIEW_TYPES: InterviewType[] = [
@@ -41,14 +45,61 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "shop_id is required" }, { status: 400 });
     }
 
-    if (!VALID_INTERVIEW_TYPES.includes(interview_type)) {
+    // フロントエンドの "initial" を API の "initial_interview" に正規化
+    const normalizedType = interview_type === "initial" ? "initial_interview" : interview_type;
+
+    if (!VALID_INTERVIEW_TYPES.includes(normalizedType)) {
       return NextResponse.json(
         { error: `Invalid interview_type. Must be one of: ${VALID_INTERVIEW_TYPES.join(", ")}` },
         { status: 400 }
       );
     }
 
+    // AI APIキーのチェック（DB操作前に確認）
+    const aiProvider = process.env.AI_PROVIDER ?? "openai";
+    const requiredKey = aiProvider === "anthropic" ? "ANTHROPIC_API_KEY" : "OPENAI_API_KEY";
+    if (!process.env[requiredKey]) {
+      return NextResponse.json(
+        { error: "AI API key not configured", details: `${requiredKey} environment variable is missing` },
+        { status: 500 }
+      );
+    }
+
+    // 認証チェック
     const supabase = await createServerSupabaseClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+    }
+    // ユーザーロールを取得
+    const { data: userData } = await supabase
+      .from("users")
+      .select("role")
+      .eq("id", user.id)
+      .single();
+    const userRole = (userData as { role: string } | null)?.role ?? "consumer";
+
+    // オーナーシップ検証: admin は全店舗アクセス可、それ以外は owner_id チェック
+    if (userRole === "admin") {
+      const { data: shopCheck } = await supabase
+        .from("shops")
+        .select("id")
+        .eq("id", shop_id)
+        .single();
+      if (!shopCheck) {
+        return NextResponse.json({ error: "Shop not found" }, { status: 404 });
+      }
+    } else {
+      const { data: ownerCheck } = await supabase
+        .from("shops")
+        .select("id")
+        .eq("id", shop_id)
+        .eq("owner_id", user.id)
+        .single();
+      if (!ownerCheck) {
+        return NextResponse.json({ error: "Forbidden: shop not found or not owned by you" }, { status: 403 });
+      }
+    }
 
     // 店舗情報を取得
     const { data: shop, error: shopError } = await supabase
@@ -65,7 +116,7 @@ export async function POST(request: Request) {
 
     // 月次アップデートの場合、前回のインタビュー要約を取得
     let previousSummary = "";
-    if (interview_type === "monthly_update") {
+    if (normalizedType === "monthly_update") {
       const { data: prevInterview } = await supabase
         .from("ai_interviews")
         .select("transcript, engagement_context")
@@ -87,16 +138,35 @@ export async function POST(request: Request) {
       }
     }
 
+    // データ循環: インタビューコンテキスト構築（v6.1）
+    let engagementContext: EngagementContext | undefined = undefined;
+    let interviewContext;
+    try {
+      interviewContext = await getInterviewContext(supabase, shop_id);
+
+      // InterviewContext を EngagementContext 形式にマージ
+      engagementContext = mergeContextToEngagement(
+        {
+          ownerName: typedShop.owner_name,
+          shopName: typedShop.name,
+          category: typedShop.category,
+        },
+        interviewContext,
+      );
+    } catch (ctxError) {
+      console.error("Failed to build interview context:", ctxError);
+    }
+
     // ai_interviews に新規レコード作成
     const { data: interview, error: interviewError } = await supabase
       .from("ai_interviews")
       .insert({
         shop_id,
-        interview_type,
+        interview_type: normalizedType,
         status: "in_progress",
         current_phase: 1,
         transcript: [],
-        engagement_context: {
+        engagement_context: engagementContext ?? {
           owner_name: typedShop.owner_name,
           shop_name: typedShop.name,
           category: typedShop.category,
@@ -118,9 +188,9 @@ export async function POST(request: Request) {
 
     const interviewData = interview as { id: string };
 
-    // interview_type に応じたシステムプロンプトを構築
+    // normalizedType に応じたシステムプロンプトを構築
     let systemPrompt: string;
-    switch (interview_type as InterviewType) {
+    switch (normalizedType as InterviewType) {
       case "monthly_update":
         systemPrompt = buildMonthlyUpdatePrompt({
           ownerName: typedShop.owner_name,
@@ -145,43 +215,38 @@ export async function POST(request: Request) {
           ownerName: typedShop.owner_name,
           shopName: typedShop.name,
           category: typedShop.category,
+          engagementContext,
+          interviewContext,
         });
         break;
     }
 
-    // OpenAI APIキーのチェック
-    if (!process.env.OPENAI_API_KEY) {
-      return NextResponse.json(
-        { error: "OpenAI API key not configured", details: "OPENAI_API_KEY environment variable is missing" },
-        { status: 500 }
-      );
-    }
-
-    // OpenAI で最初の挨拶メッセージを生成
-    const openai = getOpenAIClient();
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4o",
-      temperature: 0.8,
+    // AI で最初の挨拶メッセージを生成
+    const completion = await createChatCompletion({
       messages: [
         { role: "system", content: systemPrompt },
-        { role: "user", content: getStartUserMessage(interview_type) },
+        { role: "user", content: getStartUserMessage(normalizedType) },
       ],
+      temperature: 0.8,
+      purpose: "dialogue",
     });
 
-    const aiContent = completion.choices[0]?.message?.content ?? "";
+    const aiContent = completion.content;
 
     // APIコスト記録
-    const usage = extractUsage(completion);
     logApiUsage({
       endpoint: "interview/start",
-      ...usage,
+      model: completion.model,
+      promptTokens: completion.usage.prompt_tokens,
+      completionTokens: completion.usage.completion_tokens,
+      totalTokens: completion.usage.total_tokens,
       shopId: shop_id,
       interviewId: interviewData.id,
     });
 
     // JSONパース（メタデータ抽出） — ```json ブロックも対応
     let displayMessage = aiContent;
-    const initialPhase = interview_type === "initial_interview" ? "warmup" : "catchup";
+    const initialPhase = normalizedType === "initial_interview" ? "warmup" : "catchup";
     try {
       const jsonMatch = aiContent.match(/```(?:json)?\s*([\s\S]*?)```/);
       const jsonStr = jsonMatch ? jsonMatch[1].trim() : aiContent.trim();
@@ -199,12 +264,12 @@ export async function POST(request: Request) {
       role: "assistant",
       content: displayMessage,
       phase: 1,
-      metadata: { phase: initialPhase, interview_type },
+      metadata: { phase: initialPhase, interview_type: normalizedType },
     } as never);
 
     return NextResponse.json({
       interview_id: interviewData.id,
-      interview_type,
+      interview_type: normalizedType,
       message: {
         role: "assistant",
         content: displayMessage,

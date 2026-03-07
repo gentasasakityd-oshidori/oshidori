@@ -1,9 +1,13 @@
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
-/** GPT-4o pricing (USD per 1M tokens) */
+/** Model pricing (USD per 1M tokens) */
 const MODEL_PRICING: Record<string, { input: number; output: number }> = {
+  // OpenAI
   "gpt-4o": { input: 2.5, output: 10.0 },
   "gpt-4o-mini": { input: 0.15, output: 0.6 },
+  // Anthropic
+  "claude-sonnet-4-20250514": { input: 3.0, output: 15.0 },
+  "claude-haiku-3-5-20241022": { input: 0.8, output: 4.0 },
 };
 
 /**

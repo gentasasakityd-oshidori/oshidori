@@ -55,7 +55,8 @@ function LoginForm() {
         return;
       }
 
-      router.push("/");
+      const redirectTo = searchParams.get("next") || "/home";
+      router.push(redirectTo);
       router.refresh();
     } catch {
       setError("ログインに失敗しました。もう一度お試しください。");
@@ -108,7 +109,8 @@ function LoginForm() {
       }
 
       // メール確認不要の場合は即ログイン
-      router.push("/");
+      const redirectTo = searchParams.get("next") || "/home";
+      router.push(redirectTo);
       router.refresh();
     } catch {
       setError("登録に失敗しました。もう一度お試しください。");
@@ -144,7 +146,7 @@ function LoginForm() {
             className="mx-auto h-11 w-auto"
           />
           <p className="mt-3 text-sm text-muted-foreground">
-            推しの飲食店と出会う。こだわりで、つながる。
+            こだわりの飲食店と出会う。共感で、つながる。
           </p>
         </div>
 

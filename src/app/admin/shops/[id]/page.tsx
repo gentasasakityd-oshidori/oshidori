@@ -123,7 +123,7 @@ export default function AdminShopDetailPage() {
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <MiniCard
           icon={Heart}
-          label="推しファン数"
+          label="ファン数"
           value={oshi_count}
           color="text-red-600"
           bg="bg-red-50"

@@ -13,6 +13,8 @@ type StoryWithShop = Story & {
   shop_name: string;
   shop_slug: string;
   empathy_count: number;
+  quality_score: number;
+  quality_flags: string[];
 };
 
 export default function AdminStoriesPage() {
@@ -69,11 +71,26 @@ export default function AdminStoriesPage() {
         const enriched: StoryWithShop[] = (storiesData as Story[]).map(
           (story) => {
             const shop = shopMap.get(story.shop_id);
+            // 品質スコア自動算出
+            const flags: string[] = [];
+            let score = 0;
+            const bodyLen = story.body?.length ?? 0;
+            if (bodyLen >= 400) score += 30; else if (bodyLen >= 200) score += 15; else flags.push("本文が短い");
+            if (story.summary && story.summary.length >= 20) score += 15; else flags.push("要約なし");
+            if (story.title && story.title.length >= 5) score += 10;
+            const keyQuotes = (story as Record<string, unknown>).key_quotes as string[] | undefined;
+            if (keyQuotes && keyQuotes.length >= 1) score += 15; else flags.push("引用なし");
+            const emotionTags = (story as Record<string, unknown>).emotion_tags as string[] | undefined;
+            if (emotionTags && emotionTags.length >= 2) score += 15; else flags.push("タグ不足");
+            const themes = (story as Record<string, unknown>).story_themes as Record<string, number> | undefined;
+            if (themes && Object.values(themes).some(v => v >= 3)) score += 15; else flags.push("テーマ弱");
             return {
               ...story,
               shop_name: shop?.name ?? "不明",
               shop_slug: shop?.slug ?? "",
               empathy_count: empathyCounts.get(story.id) ?? 0,
+              quality_score: Math.min(score, 100),
+              quality_flags: flags,
             };
           }
         );
@@ -150,7 +167,22 @@ export default function AdminStoriesPage() {
                       作成:{" "}
                       {new Date(story.created_at).toLocaleDateString("ja-JP")}
                     </span>
+                    <span className={`font-medium ${
+                      story.quality_score >= 70 ? "text-green-600" :
+                      story.quality_score >= 40 ? "text-yellow-600" : "text-red-600"
+                    }`}>
+                      品質 {story.quality_score}点
+                    </span>
                   </div>
+                  {story.quality_flags.length > 0 && (
+                    <div className="mt-1 flex flex-wrap gap-1">
+                      {story.quality_flags.map((flag) => (
+                        <Badge key={flag} variant="outline" className="text-[10px] text-orange-600 border-orange-200">
+                          {flag}
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 <Button variant="ghost" size="icon" asChild className="shrink-0">

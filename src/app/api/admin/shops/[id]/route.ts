@@ -39,7 +39,7 @@ export async function GET(
       .select("id, name, price, is_signature")
       .eq("shop_id", id);
 
-    // 推しファン数
+    // 応援者数
     const { data: oshiData } = await supabase
       .from("oshi_shops")
       .select("user_id, created_at")

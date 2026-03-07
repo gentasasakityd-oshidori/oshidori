@@ -21,7 +21,7 @@ export async function GET() {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    // 各店舗のストーリー数と推し数を取得
+    // 各店舗のストーリー数と推し登録数を取得
     const enriched = [];
     for (const shop of (shops as Shop[]) ?? []) {
       const [storiesRes, oshiRes] = await Promise.all([

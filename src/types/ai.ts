@@ -15,20 +15,33 @@ export type InterviewPhase =
   | "future"
   | "completed";
 
-/** 月次アップデート・メニュー追加・季節限定用の短縮フェーズ */
+/** 月次アップデート・季節限定用の短縮フェーズ */
 export type ShortInterviewPhase =
   | "catchup"
   | "episode"
   | "closing"
   | "completed";
 
+/** メニュー追加 v6.1 用フェーズ */
+export type MenuInterviewPhase =
+  | "background"
+  | "ingredients_methods"
+  | "customer_message"
+  | "completed";
+
 export interface InterviewMetadata {
-  phase: InterviewPhase | ShortInterviewPhase;
+  phase: InterviewPhase | ShortInterviewPhase | MenuInterviewPhase;
   phase_number: number;
   should_transition: boolean;
-  next_phase?: InterviewPhase | ShortInterviewPhase;
+  next_phase?: InterviewPhase | ShortInterviewPhase | MenuInterviewPhase;
   key_quote?: string;
   emotion_detected?: string;
+  /** メニュー追加インタビュー用メタデータ */
+  menu_name?: string;
+  price?: number;
+  key_ingredients?: string[];
+  cooking_method?: string;
+  photo_confirmed?: boolean;
 }
 
 export interface EngagementContext {
@@ -45,6 +58,7 @@ export interface StructuredTags {
   kodawari: string[];
   personality: string[];
   scene: string[];
+  atmosphere?: string[];
 }
 
 export interface StoryOutput {
@@ -66,12 +80,48 @@ export interface MenuOutput {
   kodawari_tags: string[];
 }
 
+/** メニューストーリー生成の出力（v6.1） */
+export interface MenuStoryOutput {
+  menu_name: string;
+  price: number;
+  story_text: string;        // 200-400文字のメニューストーリー
+  owner_message: string;     // 店主からのメッセージ
+  kodawari_text: string;     // こだわりポイント
+  eating_tip: string;        // 美味しい食べ方のコツ
+  kodawari_tags: string[];   // こだわりタグ
+  key_ingredients: string[]; // 主な食材
+}
+
 export interface PhotoRequestOutput {
   shots: {
     subject: string;
     description: string;
     priority: "high" | "medium" | "low";
   }[];
+}
+
+/** データ循環：インタビューコンテキスト */
+export interface InterviewContext {
+  /** 直近の来店データサマリー */
+  visit_summary?: {
+    total_visits_30d: number;
+    repeat_rate: number;
+    popular_times: string[];
+  };
+  /** ファンレターから抽出したテーマ */
+  fan_letter_themes?: string[];
+  /** 推し登録数・トレンド */
+  oshi_stats?: {
+    total_count: number;
+    growth_30d: number;
+  };
+  /** 感情タグの分布 */
+  empathy_distribution?: Record<string, number>;
+  /** 過去インタビューからの情報 */
+  previous_interviews?: {
+    key_quotes: string[];
+    covered_topics: string[];
+  };
 }
 
 export interface AIProvider {
