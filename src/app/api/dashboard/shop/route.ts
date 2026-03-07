@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { getMyShopId, verifyShopOwnership } from "@/lib/queries/my-shop";
+import { geocodeAddress } from "@/lib/geocode";
 
 /** Service Role クライアント（RLSバイパス用） */
 function createServiceClient() {
@@ -154,8 +155,9 @@ export async function POST(request: NextRequest) {
       phone,
       // 営業時間・定休日（JSON形式）
       hours, holidays,
-      // 外部URL
+      // 外部URL（フロントからは homepage_url / website_url どちらでも受付）
       tabelog_url, gmb_url, website_url, homepage_url,
+      // homepage_url を website_url に統合
       // エリア（最寄り駅）
       area,
       // ジオコーディング結果（フロントから渡される）
@@ -199,7 +201,8 @@ export async function POST(request: NextRequest) {
     // URL バリデーション
     if (!validateUrl(tabelog_url)) errors.push("食べログURLの形式が不正です");
     if (!validateUrl(gmb_url)) errors.push("GoogleマップURLの形式が不正です");
-    if (!validateUrl(homepage_url)) errors.push("ホームページURLの形式が不正です");
+    const resolvedWebsiteUrl = homepage_url || website_url;
+    if (!validateUrl(resolvedWebsiteUrl)) errors.push("ホームページURLの形式が不正です");
 
     if (errors.length > 0) {
       return NextResponse.json({ error: errors.join("、") }, { status: 400 });
@@ -238,7 +241,7 @@ export async function POST(request: NextRequest) {
         holidays: typeof holidays === "object" ? JSON.stringify(holidays) : holidays?.trim() ?? null,
         tabelog_url: tabelog_url?.trim() || null,
         gmb_url: gmb_url?.trim() || null,
-        homepage_url: homepage_url?.trim() || null,
+        website_url: resolvedWebsiteUrl?.trim() || null,
         owner_id: user.id,
         is_published: false,
       } as never)
@@ -250,14 +253,35 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
 
+    // ジオコーディング: フロントから座標が渡されていない場合、住所から自動取得
+    const shopId = (data as { id: string }).id;
+    let resolvedLat = latitude ?? null;
+    let resolvedLng = longitude ?? null;
+
+    if (!resolvedLat && !resolvedLng && fullAddress) {
+      try {
+        const geo = await geocodeAddress(fullAddress);
+        if (geo) {
+          resolvedLat = geo.latitude;
+          resolvedLng = geo.longitude;
+          // shops テーブルの緯度経度を更新
+          await admin
+            .from("shops")
+            .update({ latitude: resolvedLat, longitude: resolvedLng } as never)
+            .eq("id", shopId);
+        }
+      } catch (e) {
+        console.error("Geocoding failed for new shop:", e);
+      }
+    }
+
     // shop_basic_info にジオコーディング結果を保存
-    if (data && (latitude || nearest_station)) {
-      const shopId = (data as { id: string }).id;
+    if (resolvedLat || nearest_station) {
       await admin.from("shop_basic_info").upsert({
         shop_id: shopId,
         nearest_station: nearest_station || null,
-        latitude: latitude || null,
-        longitude: longitude || null,
+        latitude: resolvedLat,
+        longitude: resolvedLng,
         walking_minutes: walking_minutes || null,
       } as never, { onConflict: "shop_id" });
     }
@@ -343,7 +367,12 @@ export async function PATCH(request: NextRequest) {
     // URL バリデーション
     if ("tabelog_url" in updates && !validateUrl(updates.tabelog_url)) errors.push("食べログURLの形式が不正です");
     if ("gmb_url" in updates && !validateUrl(updates.gmb_url)) errors.push("GoogleマップURLの形式が不正です");
-    if ("homepage_url" in updates && !validateUrl(updates.homepage_url)) errors.push("ホームページURLの形式が不正です");
+    if ("homepage_url" in updates) {
+      // フロントからの homepage_url を DB の website_url に変換
+      updates.website_url = updates.homepage_url;
+      delete updates.homepage_url;
+    }
+    if ("website_url" in updates && !validateUrl(updates.website_url)) errors.push("ホームページURLの形式が不正です");
 
     if (errors.length > 0) {
       return NextResponse.json({ error: errors.join("、") }, { status: 400 });
@@ -365,14 +394,35 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
 
+    // ジオコーディング: 住所が更新されて座標が渡されていない場合、自動取得
+    let resolvedLat = latitude ?? null;
+    let resolvedLng = longitude ?? null;
+
+    if (!resolvedLat && !resolvedLng && "address" in updates && updates.address) {
+      try {
+        const geo = await geocodeAddress(updates.address as string);
+        if (geo) {
+          resolvedLat = geo.latitude;
+          resolvedLng = geo.longitude;
+          // shops テーブルの緯度経度も更新
+          await supabase
+            .from("shops")
+            .update({ latitude: resolvedLat, longitude: resolvedLng } as never)
+            .eq("id", shop_id);
+        }
+      } catch (e) {
+        console.error("Geocoding failed for shop update:", e);
+      }
+    }
+
     // shop_basic_info 更新（ジオコーディング結果）
-    if (latitude || nearest_station) {
+    if (resolvedLat || nearest_station) {
       const admin = createServiceClient();
       await admin.from("shop_basic_info").upsert({
         shop_id,
         nearest_station: nearest_station || null,
-        latitude: latitude || null,
-        longitude: longitude || null,
+        latitude: resolvedLat,
+        longitude: resolvedLng,
         walking_minutes: walking_minutes || null,
       } as never, { onConflict: "shop_id" });
     }

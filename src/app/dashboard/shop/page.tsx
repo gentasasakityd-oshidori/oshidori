@@ -52,7 +52,7 @@ type ShopData = {
   is_published: boolean;
   tabelog_url?: string | null;
   gmb_url?: string | null;
-  homepage_url?: string | null;
+  website_url?: string | null;
 };
 
 type HoursData = {
@@ -1394,7 +1394,7 @@ export default function ShopInfoPage() {
             holidaysData: parsedHolidays,
             tabelogUrl: s.tabelog_url ?? "",
             gmbUrl: s.gmb_url ?? "",
-            homepageUrl: s.homepage_url ?? "",
+            homepageUrl: s.website_url ?? "",
           });
           setFormReady(true);
         }
@@ -1447,7 +1447,7 @@ export default function ShopInfoPage() {
             holidaysData: parsedHolidays,
             tabelogUrl: s.tabelog_url ?? "",
             gmbUrl: s.gmb_url ?? "",
-            homepageUrl: s.homepage_url ?? "",
+            homepageUrl: s.website_url ?? "",
           });
           setFormReady(true);
         }}

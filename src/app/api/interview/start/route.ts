@@ -114,6 +114,38 @@ export async function POST(request: Request) {
 
     const typedShop = shop as Shop;
 
+    // 既存の in_progress インタビューがあれば再利用（重複防止）
+    const { data: existingInterview } = await supabase
+      .from("ai_interviews")
+      .select("id, interview_type, current_phase")
+      .eq("shop_id", shop_id)
+      .eq("status", "in_progress")
+      .eq("interview_type", normalizedType)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (existingInterview) {
+      const existing = existingInterview as { id: string; interview_type: string; current_phase: number };
+      // 既存インタビューの最新メッセージを取得
+      const { data: lastMsg } = await supabase
+        .from("interview_messages")
+        .select("content, role")
+        .eq("interview_id", existing.id)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      return NextResponse.json({
+        interview_id: existing.id,
+        interview_type: existing.interview_type,
+        resumed: true,
+        message: lastMsg
+          ? { role: (lastMsg as { role: string }).role, content: (lastMsg as { content: string }).content }
+          : { role: "assistant", content: "インタビューを再開しましょう。前回の続きからお話ください。" },
+      });
+    }
+
     // 月次アップデートの場合、前回のインタビュー要約を取得
     let previousSummary = "";
     if (normalizedType === "monthly_update") {

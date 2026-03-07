@@ -3,7 +3,8 @@
 import { useState, useMemo, useEffect, useCallback, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
-import { Search, SlidersHorizontal, X, Loader2, List, MapPin, ChevronDown } from "lucide-react";
+import { Search, SlidersHorizontal, X, Loader2, List, MapPin, ChevronDown, Settings } from "lucide-react";
+import { useGeolocation } from "@/hooks/use-geolocation";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -280,7 +281,8 @@ function ExploreContent() {
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [isSortOpen, setIsSortOpen] = useState(false);
   const [stationQuery, setStationQuery] = useState("");
-  const [geoLoading, setGeoLoading] = useState(false);
+  const geo = useGeolocation();
+  const geoLoading = geo.loading;
   const [viewMode, setViewMode] = useState<"list" | "map">(() => {
     if (typeof window !== "undefined") {
       const saved = sessionStorage.getItem("explore_viewMode");
@@ -291,9 +293,9 @@ function ExploreContent() {
   const [shops, setShops] = useState<ShopWithRelations[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
 
-  // Geolocation
-  const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
-  const [geoError, setGeoError] = useState<string | null>(null);
+  // Geolocation — useGeolocation フックを利用
+  const userLocation = geo.location;
+  const geoError = geo.error;
 
   // viewModeをsessionStorageに保存
   useEffect(() => {
@@ -324,33 +326,21 @@ function ExploreContent() {
     fetchShops();
   }, []);
 
-  // 位置情報取得関数
+  // 位置情報取得関数（useGeolocation フック経由）
   const requestGeolocation = useCallback(() => {
     if (userLocation) {
       setSortMode("distance");
       return;
     }
-    if (!navigator.geolocation) {
-      setGeoError("お使いのブラウザは位置情報に対応していません");
-      return;
+    geo.requestLocation();
+  }, [userLocation, geo]);
+
+  // フックから位置情報が取得されたらdistanceソートに切り替え
+  useEffect(() => {
+    if (geo.location && sortMode !== "distance") {
+      setSortMode("distance");
     }
-    setGeoLoading(true);
-    setGeoError(null);
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude });
-        setGeoError(null);
-        setGeoLoading(false);
-        setSortMode("distance");
-      },
-      (err) => {
-        console.error("Geolocation error:", err);
-        setGeoLoading(false);
-        setGeoError("位置情報を許可してください。ブラウザの設定から位置情報の使用を許可できます。");
-      },
-      { enableHighAccuracy: false, timeout: 10000, maximumAge: 300000 }
-    );
-  }, [userLocation]);
+  }, [geo.location]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Request geolocation when distance sort is selected
   useEffect(() => {
@@ -833,26 +823,48 @@ function ExploreContent() {
             type="button"
             onClick={requestGeolocation}
             disabled={geoLoading}
-            className="flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-4 py-2 text-xs text-blue-600 hover:bg-blue-100 transition-colors disabled:opacity-60"
+            className={`flex items-center gap-1.5 rounded-full border px-4 py-2 text-xs transition-colors disabled:opacity-60 ${
+              geo.isDenied
+                ? "border-orange-200 bg-orange-50 text-orange-600 hover:bg-orange-100"
+                : "border-blue-200 bg-blue-50 text-blue-600 hover:bg-blue-100"
+            }`}
           >
             {geoLoading ? (
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : geo.isDenied ? (
+              <Settings className="h-3.5 w-3.5" />
             ) : (
               <MapPin className="h-3.5 w-3.5" />
             )}
-            <span>{geoLoading ? "位置情報を取得中..." : "現在地から近い順で探す"}</span>
+            <span>
+              {geoLoading
+                ? "位置情報を取得中..."
+                : geo.isDenied
+                  ? "位置情報の設定を確認する"
+                  : "現在地から近い順で探す"}
+            </span>
           </button>
-          {!geoLoading && !geoError && (
+          {!geoLoading && !geoError && !geo.isDenied && (
             <p className="mt-1 text-[10px] text-gray-400 ml-1">タップすると位置情報の許可を求めます</p>
           )}
         </div>
       )}
       {userLocation && sortMode === "distance" && (
-        <div className="mt-2">
+        <div className="mt-2 flex items-center gap-2">
           <span className="inline-flex items-center gap-1 rounded-full bg-green-50 px-2.5 py-1 text-[11px] text-green-600">
             <MapPin className="h-3 w-3" />
             現在地を使用中
           </span>
+          <button
+            type="button"
+            onClick={() => {
+              geo.clearLocation();
+              setSortMode("forecast");
+            }}
+            className="text-[11px] text-gray-400 hover:text-gray-600 underline"
+          >
+            解除
+          </button>
         </div>
       )}
 
@@ -967,7 +979,18 @@ function ExploreContent() {
       {/* Geo fallback: station-based filter when geolocation denied */}
       {geoError && (
         <div className="mt-2 rounded-lg border border-orange-200 bg-orange-50 p-3">
-          <p className="text-xs text-orange-600 mb-2">{geoError}</p>
+          <p className="text-xs font-medium text-orange-600 mb-1">{geoError}</p>
+
+          {/* 拒否済み時: デバイス別の設定変更ガイド */}
+          {geo.settingsGuide && (
+            <div className="mb-2 rounded-md bg-white/70 p-2.5 border border-orange-100">
+              <p className="text-[11px] leading-relaxed text-gray-700">
+                <Settings className="inline h-3 w-3 mr-1 text-orange-500 -mt-0.5" />
+                {geo.settingsGuide}
+              </p>
+            </div>
+          )}
+
           <p className="text-xs text-gray-500 mb-1.5">代わりに駅で絞り込めます：</p>
           <div className="flex flex-wrap gap-1.5">
             {stationList.map((st) => (

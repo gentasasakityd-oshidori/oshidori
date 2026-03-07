@@ -39,7 +39,7 @@ export default function AboutPage() {
               <Sparkles className="h-8 w-8 text-primary" />
               <h3 className="mt-3 font-semibold">想いをストーリーに</h3>
               <p className="mt-2 text-sm text-muted-foreground">
-                発信が苦手でも大丈夫。1時間の対話だけで、
+                発信が苦手でも大丈夫。30分の対話だけで、
                 お店の魅力が伝わるストーリーが完成します。
               </p>
             </div>

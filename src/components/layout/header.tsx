@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { Search, Heart, Menu, X, LogOut, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet";
@@ -13,15 +13,40 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { User as SupabaseUser } from "@supabase/supabase-js";
 
-export function Header() {
+type HeaderProps = {
+  initialUser?: { id: string; email?: string } | null;
+  initialNickname?: string | null;
+};
+
+export function Header({ initialUser = null, initialNickname = null }: HeaderProps) {
   const router = useRouter();
+  const pathname = usePathname();
   const [isOpen, setIsOpen] = useState(false);
-  const [user, setUser] = useState<SupabaseUser | null>(null);
-  const [nickname, setNickname] = useState<string | null>(null);
+  // サーバーサイドで取得した初期値を使用（SSRハイドレーションフリッカー防止）
+  const [user, setUser] = useState<SupabaseUser | null>(
+    initialUser ? ({ id: initialUser.id, email: initialUser.email } as SupabaseUser) : null
+  );
+  const [nickname, setNickname] = useState<string | null>(initialNickname);
+
+  /** /home#forecast のような同一ページ内ハッシュリンクを処理 */
+  const handleHashNavigation = useCallback(
+    (e: React.MouseEvent, targetPath: string, hash: string) => {
+      if (pathname === targetPath) {
+        e.preventDefault();
+        const element = document.getElementById(hash);
+        if (element) {
+          element.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+        window.history.pushState(null, "", `${targetPath}#${hash}`);
+      }
+      // 別のページにいる場合は Link のデフォルト動作（ナビゲーション）に任せる
+    },
+    [pathname]
+  );
 
   useEffect(() => {
     const supabase = createClient();
@@ -112,6 +137,7 @@ export function Header() {
           <Link
             href="/home#forecast"
             className="rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:text-foreground hover:bg-accent"
+            onClick={(e) => handleHashNavigation(e, "/home", "forecast")}
           >
             相性予報
           </Link>

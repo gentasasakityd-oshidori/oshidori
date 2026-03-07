@@ -755,7 +755,7 @@ export default async function HomePage() {
           <p className="mt-3 text-sm opacity-90 text-primary-foreground">
             あなたの&quot;こだわり&quot;を引き出し、プロ品質のストーリーに。
             <br />
-            発信が苦手でも大丈夫。1時間の対話だけで、お店の魅力が伝わります。
+            発信が苦手でも大丈夫。30分の対話だけで、お店の魅力が伝わります。
           </p>
           <Button size="lg" variant="secondary" className="mt-6" asChild>
             <Link href="/for-shops">無料で始める</Link>

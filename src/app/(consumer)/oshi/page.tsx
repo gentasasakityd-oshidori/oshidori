@@ -534,9 +534,9 @@ export default function OshiPage() {
                               {shop.area}
                             </p>
                           )}
-                          {shop.stories[0] && (
+                          {(shop.stories[0]?.catchcopy_primary || shop.stories[0]?.summary || shop.description) && (
                             <p className="mt-1 text-[12px] text-muted-foreground leading-snug line-clamp-2">
-                              {shop.stories[0].catchcopy_primary ?? shop.stories[0].summary}
+                              {shop.stories[0]?.catchcopy_primary ?? shop.stories[0]?.summary ?? shop.description}
                             </p>
                           )}
                           <div className="mt-1.5 flex items-center gap-3 text-[11px] text-muted-foreground">

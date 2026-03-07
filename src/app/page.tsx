@@ -21,7 +21,7 @@ export default function PortalPage() {
       </p>
 
       {/* 3つの選択肢 */}
-      <div className="grid w-full max-w-3xl gap-5 sm:grid-cols-3">
+      <div className="grid w-full max-w-4xl gap-5 sm:grid-cols-3">
         {/* 消費者向け */}
         <Link
           href="/home"
@@ -47,7 +47,7 @@ export default function PortalPage() {
             <Store className="h-8 w-8 text-blue-600" />
           </div>
           <div className="text-center">
-            <h2 className="text-lg font-bold text-gray-900">
+            <h2 className="text-base font-bold text-gray-900 sm:text-lg whitespace-nowrap">
               飲食店ダッシュボード
             </h2>
             <p className="mt-1 text-xs text-gray-500">

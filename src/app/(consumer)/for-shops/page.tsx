@@ -22,11 +22,11 @@ import { Separator } from "@/components/ui/separator";
 export const metadata: Metadata = {
   title: "飲食店オーナー様へ",
   description:
-    "AIインタビューであなたのお店の想いをストーリーに。発信が苦手でも大丈夫。1時間の対話だけで、こだわりが伝わるプロ品質のコンテンツが完成します。無料プランあり。",
+    "AIインタビューであなたのお店の想いをストーリーに。発信が苦手でも大丈夫。30分の対話だけで、こだわりが伝わるプロ品質のコンテンツが完成します。無料プランあり。",
   openGraph: {
     title: "飲食店オーナー様へ | オシドリ",
     description:
-      "AIインタビューであなたのお店の想いをストーリーに。発信が苦手でも大丈夫。1時間の対話だけで、こだわりが伝わるプロ品質のコンテンツが完成します。",
+      "AIインタビューであなたのお店の想いをストーリーに。発信が苦手でも大丈夫。30分の対話だけで、こだわりが伝わるプロ品質のコンテンツが完成します。",
     url: "https://oshidori.vercel.app/for-shops",
     type: "website",
   },
@@ -39,7 +39,7 @@ const STEPS = [
   {
     number: "01",
     icon: Mic,
-    title: "AIと1時間対話",
+    title: "AIと30分対話",
     description:
       "AIがインタビュアーとなり、あなたのお店の想い・こだわり・歩みを丁寧に引き出します。話すのが苦手でも大丈夫。質問に答えるだけでOKです。",
   },
@@ -115,7 +115,7 @@ const TIMELINE = [
   },
   {
     step: "AIインタビュー",
-    time: "約1時間",
+    time: "約30分",
     description:
       "AIがあなたのお店の想いを引き出します。スマホからでもOK。",
   },
@@ -162,7 +162,7 @@ export default function ForShopsPage() {
           </p>
           <div className="mt-8 flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
             <Button size="lg" asChild>
-              <Link href="/login">
+              <Link href="/apply-shop-owner">
                 無料で始める
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Link>
@@ -196,7 +196,7 @@ export default function ForShopsPage() {
             ))}
           </div>
           <p className="mt-8 text-sm text-muted-foreground">
-            オシドリなら、<strong className="text-foreground">1時間の対話だけ</strong>で、
+            オシドリなら、<strong className="text-foreground">30分の対話だけ</strong>で、
             お店の魅力が伝わるストーリーが完成します。
           </p>
         </div>
@@ -353,7 +353,7 @@ export default function ForShopsPage() {
                     variant={plan.highlighted ? "default" : "outline"}
                     asChild
                   >
-                    <Link href="/login">{plan.cta}</Link>
+                    <Link href="/apply-shop-owner">{plan.cta}</Link>
                   </Button>
                 </CardContent>
               </Card>
@@ -470,7 +470,7 @@ export default function ForShopsPage() {
             className="mt-6"
             asChild
           >
-            <Link href="/login">
+            <Link href="/apply-shop-owner">
               無料で始める
               <ArrowRight className="ml-2 h-4 w-4" />
             </Link>

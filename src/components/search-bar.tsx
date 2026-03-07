@@ -1,13 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Search, ArrowRight, Navigation } from "lucide-react";
+import { Search, ArrowRight, Navigation, Settings } from "lucide-react";
+import { useGeolocation } from "@/hooks/use-geolocation";
 
 export function SearchBar() {
   const router = useRouter();
   const [query, setQuery] = useState("");
-  const [locating, setLocating] = useState(false);
+  const geo = useGeolocation();
+  const [showGuide, setShowGuide] = useState(false);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -20,35 +22,34 @@ export function SearchBar() {
   }
 
   function handleNearMe() {
-    if (!navigator.geolocation) {
-      alert("お使いのブラウザでは位置情報を利用できません");
+    // 拒否済みの場合はガイドを表示
+    if (geo.isDenied) {
+      setShowGuide(true);
+      geo.requestLocation(); // エラー状態を更新
       return;
     }
-    setLocating(true);
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setLocating(false);
-        router.push(
-          `/explore?sort=distance&lat=${pos.coords.latitude}&lng=${pos.coords.longitude}`,
-        );
-      },
-      (error) => {
-        setLocating(false);
-        if (error.code === error.PERMISSION_DENIED) {
-          alert("位置情報の使用が拒否されました。ブラウザの設定から位置情報の許可をオンにしてください。");
-        } else if (error.code === error.TIMEOUT) {
-          alert("位置情報の取得がタイムアウトしました。もう一度お試しください。");
-        } else {
-          alert("位置情報の取得に失敗しました。設定から位置情報の許可をご確認ください。");
-        }
-      },
-      {
-        enableHighAccuracy: false,
-        timeout: 30000,
-        maximumAge: 300000,
-      },
-    );
+
+    // 既に取得済みなら即遷移
+    if (geo.location) {
+      router.push(
+        `/explore?sort=distance&lat=${geo.location.lat}&lng=${geo.location.lng}`,
+      );
+      return;
+    }
+
+    // 未取得: ブラウザに許可を求める → 取得後に遷移
+    geo.requestLocation();
   }
+
+  // location 取得成功時に自動遷移
+  useEffect(() => {
+    if (geo.location) {
+      setShowGuide(false);
+      router.push(
+        `/explore?sort=distance&lat=${geo.location.lat}&lng=${geo.location.lng}`,
+      );
+    }
+  }, [geo.location]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="space-y-2">
@@ -70,12 +71,60 @@ export function SearchBar() {
       <button
         type="button"
         onClick={handleNearMe}
-        disabled={locating}
-        className="inline-flex items-center gap-1.5 rounded-full border border-primary/20 bg-primary/5 px-3 py-1.5 text-xs font-medium text-primary transition-all hover:bg-primary/10 hover:border-primary/30 disabled:opacity-50"
+        disabled={geo.loading}
+        className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-all disabled:opacity-50 ${
+          geo.isDenied
+            ? "border-orange-200 bg-orange-50 text-orange-600 hover:bg-orange-100"
+            : "border-primary/20 bg-primary/5 text-primary hover:bg-primary/10 hover:border-primary/30"
+        }`}
       >
-        <Navigation className="h-3 w-3" />
-        {locating ? "取得中..." : "現在地から探す"}
+        {geo.loading ? (
+          <>
+            <Navigation className="h-3 w-3 animate-pulse" />
+            取得中...
+          </>
+        ) : geo.isDenied ? (
+          <>
+            <Settings className="h-3 w-3" />
+            位置情報の設定を確認
+          </>
+        ) : (
+          <>
+            <Navigation className="h-3 w-3" />
+            現在地から探す
+          </>
+        )}
       </button>
+
+      {/* 位置情報拒否時の設定変更ガイド */}
+      {showGuide && geo.settingsGuide && (
+        <div className="rounded-lg border border-orange-200 bg-orange-50 p-3">
+          <div className="flex items-start justify-between gap-2">
+            <div>
+              <p className="text-xs font-medium text-orange-600 mb-1">
+                位置情報の利用が拒否されています
+              </p>
+              <p className="text-[11px] leading-relaxed text-gray-700">
+                <Settings className="inline h-3 w-3 mr-1 text-orange-500 -mt-0.5" />
+                {geo.settingsGuide}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowGuide(false)}
+              className="shrink-0 text-gray-400 hover:text-gray-600 text-xs"
+              aria-label="閉じる"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* エラー表示（拒否以外: タイムアウトなど） */}
+      {geo.error && !geo.isDenied && (
+        <p className="text-[11px] text-orange-600 ml-1">{geo.error}</p>
+      )}
     </div>
   );
 }
