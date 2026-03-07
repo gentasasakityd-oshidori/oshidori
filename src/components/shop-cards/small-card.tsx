@@ -11,9 +11,12 @@ interface SmallCardProps {
   area?: string | null;
   imageUrl?: string | null;
   catchcopy?: string | null;
+  hookSentence?: string | null;
   displayTags?: Array<{ icon: string; label: string }>;
   forecastScore?: number | null;
   forecastReasonText?: string | null;
+  /** 相性マッチ理由タグ（カード/タグ形式で表示） */
+  forecastReasonTags?: Array<{ icon: string; label: string }>;
   budgetLabel?: string | null;
 }
 
@@ -23,9 +26,11 @@ export function SmallCard({
   area,
   imageUrl,
   catchcopy,
+  hookSentence,
   displayTags,
   forecastScore,
   forecastReasonText,
+  forecastReasonTags,
   budgetLabel,
 }: SmallCardProps) {
   const budget = budgetLabel
@@ -61,9 +66,14 @@ export function SmallCard({
           </div>
         )}
 
-        {/* Shop name overlay on image */}
+        {/* Shop name + catchcopy overlay on image */}
         <div className="absolute inset-x-0 bottom-0 px-2.5 pb-2">
-          <p className="text-[13px] font-semibold text-white leading-tight drop-shadow-sm line-clamp-2">
+          {catchcopy && (
+            <p className="text-[13px] font-bold text-white leading-tight drop-shadow-sm line-clamp-2">
+              {catchcopy}
+            </p>
+          )}
+          <p className="text-[13px] font-semibold text-white leading-tight drop-shadow-sm line-clamp-2 mt-0.5">
             {shopName}
           </p>
           <div className="flex items-center gap-1.5 mt-0.5">
@@ -83,10 +93,10 @@ export function SmallCard({
 
       {/* Text area */}
       <div className="p-2.5 flex flex-col gap-1">
-        {/* Catchcopy (PRIMARY) — wrapping allowed, 3 lines max */}
-        {catchcopy && (
-          <p className="text-[13px] font-medium text-[#2C3E50] leading-[1.4] line-clamp-3 group-hover:text-[#E06A4E] transition-colors">
-            {catchcopy}
+        {/* Hook sentence — ストーリーの引き込み文 */}
+        {hookSentence && (
+          <p className="border-l-2 border-[#E06A4E]/30 pl-2 bg-orange-50/50 rounded-r text-[12px] italic text-gray-700 leading-[1.4] line-clamp-3">
+            {hookSentence}
           </p>
         )}
 
@@ -105,15 +115,27 @@ export function SmallCard({
           </div>
         )}
 
-        {/* Forecast score and reason */}
+        {/* Forecast score and reason tags */}
         {forecastScore != null && forecastScore > 0 && (
-          <div className="flex items-center gap-1.5 mt-0.5">
+          <div className="mt-0.5 space-y-1">
             <ForecastBadge score={forecastScore} />
-            {forecastReasonText && (
-              <span className="text-[11px] text-orange-600 line-clamp-1 flex-1 min-w-0">
+            {forecastReasonTags && forecastReasonTags.length > 0 ? (
+              <div className="flex flex-wrap gap-1">
+                {forecastReasonTags.map((tag, i) => (
+                  <span
+                    key={i}
+                    className="inline-flex items-center gap-0.5 rounded-md bg-orange-50 border border-orange-100 px-1.5 py-0.5 text-[10px] text-orange-700"
+                  >
+                    <span>{tag.icon}</span>
+                    <span>{tag.label}</span>
+                  </span>
+                ))}
+              </div>
+            ) : forecastReasonText ? (
+              <span className="text-[10px] text-orange-600 leading-snug line-clamp-1">
                 {forecastReasonText}
               </span>
-            )}
+            ) : null}
           </div>
         )}
       </div>

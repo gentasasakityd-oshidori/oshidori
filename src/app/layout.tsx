@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Suspense } from "react";
-import { Noto_Sans_JP } from "next/font/google";
+import { Noto_Sans_JP, Zen_Maru_Gothic } from "next/font/google";
 import { Toaster } from "@/components/ui/sonner";
 import { PostHogProvider } from "@/components/posthog-provider";
 import "./globals.css";
@@ -9,6 +9,12 @@ const SITE_URL = "https://oshidori.vercel.app";
 
 const notoSansJP = Noto_Sans_JP({
   variable: "--font-noto-sans-jp",
+  subsets: ["latin"],
+  weight: ["400", "500", "700"],
+});
+
+const zenMaruGothic = Zen_Maru_Gothic({
+  variable: "--font-zen-maru",
   subsets: ["latin"],
   weight: ["400", "500", "700"],
 });
@@ -92,7 +98,7 @@ export default function RootLayout({
           dangerouslySetInnerHTML={{ __html: JSON.stringify(siteJsonLd) }}
         />
       </head>
-      <body className={`${notoSansJP.variable} font-sans antialiased`}>
+      <body className={`${notoSansJP.variable} ${zenMaruGothic.variable} font-sans antialiased`}>
         <Suspense fallback={null}>
           <PostHogProvider>{children}</PostHogProvider>
         </Suspense>

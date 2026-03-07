@@ -15,6 +15,8 @@ interface HorizontalCardProps {
   walkingMinutes?: number | null;
   forecastScore?: number | null;
   forecastReasonText?: string | null;
+  /** 相性マッチ理由タグ（カード/タグ形式で表示） */
+  forecastReasonTags?: Array<{ icon: string; label: string }>;
   budgetLabel?: string | null;
 }
 
@@ -28,6 +30,7 @@ export function HorizontalCard({
   walkingMinutes,
   forecastScore,
   forecastReasonText,
+  forecastReasonTags,
   budgetLabel,
 }: HorizontalCardProps) {
   const budget = budgetLabel
@@ -108,15 +111,25 @@ export function HorizontalCard({
           )}
         </div>
 
-        {/* Forecast score */}
+        {/* Forecast score + reason tags */}
         {forecastScore != null && forecastScore > 0 && (
-          <div className="flex items-center gap-1.5 mt-0.5">
+          <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
             <ForecastBadge score={forecastScore} />
-            {forecastReasonText && (
+            {forecastReasonTags && forecastReasonTags.length > 0 ? (
+              forecastReasonTags.map((tag, i) => (
+                <span
+                  key={i}
+                  className="inline-flex items-center gap-0.5 rounded-md bg-orange-50 border border-orange-100 px-1.5 py-0.5 text-[10px] text-orange-700"
+                >
+                  <span>{tag.icon}</span>
+                  <span>{tag.label}</span>
+                </span>
+              ))
+            ) : forecastReasonText ? (
               <span className="text-[11px] text-orange-600 line-clamp-1 flex-1 min-w-0">
                 {forecastReasonText}
               </span>
-            )}
+            ) : null}
           </div>
         )}
       </div>

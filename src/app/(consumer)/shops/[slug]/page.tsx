@@ -882,66 +882,56 @@ export default function ShopDetailPage() {
       </section>
       )}
 
-      {/* 予約打診 */}
-      <section className="border-t border-gray-100 px-4 py-5">
-        {reservationSent ? (
-          <div className="rounded-xl border border-green-200 bg-green-50 p-4 text-center">
-            <Check className="mx-auto h-6 w-6 text-green-600" />
-            <p className="mt-2 text-sm font-medium text-green-800">予約打診を送信しました</p>
-            <p className="mt-1 text-xs text-green-600">店主からの返答をお待ちください</p>
-          </div>
-        ) : showReservationForm ? (
-          <Card className="border-gray-100">
-            <CardContent className="space-y-3 p-4">
-              <h3 className="flex items-center gap-2 text-sm font-medium text-[#2C3E50]">
-                <CalendarClock className="h-4 w-4 text-[#E06A4E]" />
-                予約を打診する
-              </h3>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="mb-1 block text-xs text-gray-400">希望日</label>
-                  <Input type="date" value={reservationDate} onChange={e => setReservationDate(e.target.value)} />
+      {/* 予約打診（インライン: 送信済み or フォーム展開時のみ表示） */}
+      {(reservationSent || showReservationForm) && (
+        <section className="border-t border-gray-100 px-4 py-5">
+          {reservationSent ? (
+            <div className="rounded-xl border border-green-200 bg-green-50 p-4 text-center">
+              <Check className="mx-auto h-6 w-6 text-green-600" />
+              <p className="mt-2 text-sm font-medium text-green-800">予約打診を送信しました</p>
+              <p className="mt-1 text-xs text-green-600">店主からの返答をお待ちください</p>
+            </div>
+          ) : (
+            <Card className="border-gray-100">
+              <CardContent className="space-y-3 p-4">
+                <h3 className="flex items-center gap-2 text-sm font-medium text-[#2C3E50]">
+                  <CalendarClock className="h-4 w-4 text-[#E06A4E]" />
+                  予約を打診する
+                </h3>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="mb-1 block text-xs text-gray-400">希望日</label>
+                    <Input type="date" value={reservationDate} onChange={e => setReservationDate(e.target.value)} />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs text-gray-400">希望時間</label>
+                    <Input type="text" placeholder="19:00" value={reservationTime} onChange={e => setReservationTime(e.target.value)} />
+                  </div>
                 </div>
                 <div>
-                  <label className="mb-1 block text-xs text-gray-400">希望時間</label>
-                  <Input type="text" placeholder="19:00" value={reservationTime} onChange={e => setReservationTime(e.target.value)} />
+                  <label className="mb-1 block text-xs text-gray-400">人数</label>
+                  <select value={reservationPartySize} onChange={e => setReservationPartySize(e.target.value)} className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm">
+                    {Array.from({ length: 10 }, (_, i) => i + 1).map(n => (
+                      <option key={n} value={n}>{n}名</option>
+                    ))}
+                  </select>
                 </div>
-              </div>
-              <div>
-                <label className="mb-1 block text-xs text-gray-400">人数</label>
-                <select value={reservationPartySize} onChange={e => setReservationPartySize(e.target.value)} className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm">
-                  {Array.from({ length: 10 }, (_, i) => i + 1).map(n => (
-                    <option key={n} value={n}>{n}名</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="mb-1 block text-xs text-gray-400">メッセージ（任意）</label>
-                <Textarea placeholder="アレルギーやご要望があればお気軽にどうぞ" value={reservationMessage} onChange={e => setReservationMessage(e.target.value)} className="h-16" maxLength={500} />
-              </div>
-              <div className="flex gap-2">
-                <Button size="sm" onClick={handleReservationSubmit} disabled={!reservationDate || !reservationTime || reservationSubmitting} className="gap-1 bg-[#E06A4E] hover:bg-[#d0593d]">
-                  <Send className="h-3 w-3" />
-                  打診を送信
-                </Button>
-                <Button size="sm" variant="ghost" onClick={() => setShowReservationForm(false)}>キャンセル</Button>
-              </div>
-            </CardContent>
-          </Card>
-        ) : (
-          <Button
-            className="w-full gap-2 rounded-xl border-[#E06A4E]/20 text-[#E06A4E] hover:bg-[#E06A4E]/5"
-            variant="outline"
-            onClick={() => {
-              if (!isAuthenticated) { router.push(`/login?next=/shops/${slug}`); return; }
-              setShowReservationForm(true);
-            }}
-          >
-            <CalendarClock className="h-4 w-4" />
-            予約を打診する
-          </Button>
-        )}
-      </section>
+                <div>
+                  <label className="mb-1 block text-xs text-gray-400">メッセージ（任意）</label>
+                  <Textarea placeholder="アレルギーやご要望があればお気軽にどうぞ" value={reservationMessage} onChange={e => setReservationMessage(e.target.value)} className="h-16" maxLength={500} />
+                </div>
+                <div className="flex gap-2">
+                  <Button size="sm" onClick={handleReservationSubmit} disabled={!reservationDate || !reservationTime || reservationSubmitting} className="gap-1 bg-[#E06A4E] hover:bg-[#d0593d]">
+                    <Send className="h-3 w-3" />
+                    打診を送信
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => setShowReservationForm(false)}>キャンセル</Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </section>
+      )}
 
       {/* ファンの声 - qualitative social proof */}
       {fans.length > 0 && fans.some(f => f.push_reason) && (
@@ -1027,6 +1017,27 @@ export default function ShopDetailPage() {
       )}
 
       {/* 共感タップはストーリー内にインライン配置済み（C-13） */}
+
+      {/* フローティング予約打診CTA - 未送信 & フォーム非展開 & ストーリーモーダル非表示時 */}
+      {!reservationSent && !showReservationForm && !showStoryModal && (
+        <div className="fixed bottom-16 left-0 right-0 z-40 mx-auto max-w-3xl px-4 md:bottom-6">
+          <div className="rounded-2xl bg-white/95 backdrop-blur shadow-lg px-4 py-3">
+            <button
+              onClick={() => {
+                if (!isAuthenticated) { router.push(`/login?next=/shops/${slug}`); return; }
+                setShowReservationForm(true);
+              }}
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#E06A4E] py-3 text-sm font-bold text-white shadow-sm transition-all active:scale-[0.97] hover:bg-[#d0593d]"
+            >
+              <CalendarClock className="h-4 w-4" />
+              予約を打診する
+            </button>
+            <p className="mt-1.5 text-center text-[10px] text-gray-400">
+              まだ予約確定ではありません。空き状況の確認から始まります
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* フローティング推しCTA - ストーリー展開時のみ表示 */}
       {showStoryModal && !isOshi && (

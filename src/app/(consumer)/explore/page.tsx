@@ -8,9 +8,23 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet";
-import { CATEGORIES, BUDGET_LABELS, STATION_BY_LINE, MOOD_TAGS } from "@/lib/constants";
+import { CATEGORIES, STATION_BY_LINE, MOOD_TAGS } from "@/lib/constants";
 import { THEME_TO_DISPLAY_TAG } from "@/lib/display-tags";
-import type { BudgetLabelId, MoodTagValue } from "@/lib/constants";
+import type { MoodTagValue } from "@/lib/constants";
+
+// 予算帯の選択肢（金額ステップ）
+const BUDGET_PRICE_STEPS = [
+  { value: 0, label: "指定なし" },
+  { value: 500, label: "500円" },
+  { value: 1000, label: "1,000円" },
+  { value: 2000, label: "2,000円" },
+  { value: 3000, label: "3,000円" },
+  { value: 5000, label: "5,000円" },
+  { value: 7000, label: "7,000円" },
+  { value: 10000, label: "10,000円" },
+  { value: 15000, label: "15,000円" },
+  { value: 20000, label: "20,000円" },
+] as const;
 import { HorizontalCard } from "@/components/shop-cards/horizontal-card";
 
 import type { ShopWithRelations } from "@/types/database";
@@ -258,12 +272,15 @@ function ExploreContent() {
   const [query, setQuery] = useState(initialQuery);
   const [selectedStations, setSelectedStations] = useState<Set<string>>(() => parseSet("station"));
   const [selectedCategories, setSelectedCategories] = useState<Set<string>>(new Set());
-  const [selectedBudgets, setSelectedBudgets] = useState<Set<BudgetLabelId>>(new Set());
+  const [budgetMin, setBudgetMin] = useState<number>(0);
+  const [budgetMax, setBudgetMax] = useState<number>(0); // 0 = 指定なし（上限なし）
   const [selectedThemes, setSelectedThemes] = useState<Set<string>>(() => parseSet("theme"));
   const [selectedMoodTags, setSelectedMoodTags] = useState<Set<MoodTagValue>>(() => parseSet("mood") as Set<MoodTagValue>);
   const [sortMode, setSortMode] = useState<SortMode>("forecast");
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [isSortOpen, setIsSortOpen] = useState(false);
+  const [stationQuery, setStationQuery] = useState("");
+  const [geoLoading, setGeoLoading] = useState(false);
   const [viewMode, setViewMode] = useState<"list" | "map">(() => {
     if (typeof window !== "undefined") {
       const saved = sessionStorage.getItem("explore_viewMode");
@@ -307,23 +324,39 @@ function ExploreContent() {
     fetchShops();
   }, []);
 
-  // Request geolocation when distance sort is selected
-  useEffect(() => {
-    if (sortMode !== "distance" || userLocation) return;
+  // 位置情報取得関数
+  const requestGeolocation = useCallback(() => {
+    if (userLocation) {
+      setSortMode("distance");
+      return;
+    }
     if (!navigator.geolocation) {
       setGeoError("お使いのブラウザは位置情報に対応していません");
       return;
     }
+    setGeoLoading(true);
+    setGeoError(null);
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude });
         setGeoError(null);
+        setGeoLoading(false);
+        setSortMode("distance");
       },
-      () => {
-        setGeoError("位置情報を許可してください");
-      }
+      (err) => {
+        console.error("Geolocation error:", err);
+        setGeoLoading(false);
+        setGeoError("位置情報を許可してください。ブラウザの設定から位置情報の使用を許可できます。");
+      },
+      { enableHighAccuracy: false, timeout: 10000, maximumAge: 300000 }
     );
-  }, [sortMode, userLocation]);
+  }, [userLocation]);
+
+  // Request geolocation when distance sort is selected
+  useEffect(() => {
+    if (sortMode !== "distance" || userLocation) return;
+    requestGeolocation();
+  }, [sortMode, userLocation, requestGeolocation]);
 
   const filteredAndSortedShops = useMemo(() => {
     // 1. Filter
@@ -361,19 +394,16 @@ function ExploreContent() {
         }
       }
 
-      // OR within budgets
+      // 予算帯フィルター（下限・上限）
       let matchesBudget = true;
-      if (selectedBudgets.size > 0) {
+      if (budgetMin > 0 || budgetMax > 0) {
         const prices = shop.menus
           .map((m) => m.price)
           .filter((p): p is number => typeof p === "number" && p > 0);
         if (prices.length > 0) {
           const avgPrice = prices.reduce((a, b) => a + b, 0) / prices.length;
-          matchesBudget = Array.from(selectedBudgets).some((budgetId) => {
-            const budgetDef = BUDGET_LABELS.find((b) => b.id === budgetId);
-            if (!budgetDef) return false;
-            return avgPrice >= budgetDef.min && (budgetDef.max === null || avgPrice <= budgetDef.max);
-          });
+          if (budgetMin > 0 && avgPrice < budgetMin) matchesBudget = false;
+          if (budgetMax > 0 && avgPrice > budgetMax) matchesBudget = false;
         }
       }
 
@@ -416,7 +446,7 @@ function ExploreContent() {
     }
 
     return sorted;
-  }, [query, selectedStations, selectedCategories, selectedBudgets, selectedThemes, selectedMoodTags, shops, sortMode, userLocation]);
+  }, [query, selectedStations, selectedCategories, budgetMin, budgetMax, selectedThemes, selectedMoodTags, shops, sortMode, userLocation]);
 
   // 店舗データから駅名リストを生成
   const stationList = useMemo(() => {
@@ -433,8 +463,25 @@ function ExploreContent() {
   const [selectedLine, setSelectedLine] = useState<string | null>(null);
   const lineStations = selectedLine ? STATION_BY_LINE[selectedLine] ?? [] : [];
 
+  // 全駅名リスト（重複なし、テキスト検索用）
+  const allStationNames = useMemo(() => {
+    const set = new Set<string>();
+    for (const stations of Object.values(STATION_BY_LINE)) {
+      for (const st of stations) set.add(st);
+    }
+    return Array.from(set).sort();
+  }, []);
+
+  // テキスト入力による駅候補フィルタ
+  const stationSuggestions = useMemo(() => {
+    if (!stationQuery.trim()) return [];
+    const q = stationQuery.trim();
+    return allStationNames.filter((st) => st.includes(q)).slice(0, 10);
+  }, [stationQuery, allStationNames]);
+
+  const hasBudgetFilter = budgetMin > 0 || budgetMax > 0;
   const activeFilterCount =
-    selectedStations.size + selectedCategories.size + selectedBudgets.size + selectedThemes.size + selectedMoodTags.size;
+    selectedStations.size + selectedCategories.size + (hasBudgetFilter ? 1 : 0) + selectedThemes.size + selectedMoodTags.size;
 
   const updateURL = useCallback((params: Record<string, string | null>) => {
     const sp = new URLSearchParams();
@@ -455,10 +502,12 @@ function ExploreContent() {
   function clearFilters() {
     setSelectedStations(new Set());
     setSelectedCategories(new Set());
-    setSelectedBudgets(new Set());
+    setBudgetMin(0);
+    setBudgetMax(0);
     setSelectedThemes(new Set());
     setSelectedMoodTags(new Set());
     setSelectedLine(null);
+    setStationQuery("");
     setQuery("");
     router.replace("/explore", { scroll: false });
   }
@@ -483,12 +532,6 @@ function ExploreContent() {
     const next = toggleSet(selectedCategories, cat);
     setSelectedCategories(next);
     if (next.has(cat)) trackFilterUse({ filterType: "category", filterValue: cat });
-  }
-
-  function handleBudgetToggle(budgetId: BudgetLabelId) {
-    const next = toggleSet(selectedBudgets, budgetId);
-    setSelectedBudgets(next);
-    if (next.has(budgetId)) trackFilterUse({ filterType: "budget", filterValue: budgetId });
   }
 
   function handleMoodTagToggle(moodTag: MoodTagValue) {
@@ -567,10 +610,10 @@ function ExploreContent() {
               )}
             </Button>
           </SheetTrigger>
-          <SheetContent side="right" className="w-80">
+          <SheetContent side="right" className="w-80 flex flex-col">
             <SheetTitle>絞り込み</SheetTitle>
-            <div className="mt-6 space-y-6">
-              {/* 駅 (2段階: 路線→駅 or 一覧) */}
+            <div className="mt-4 flex-1 overflow-y-auto space-y-6 pb-6 pr-1">
+              {/* 駅（路線から選ぶ or テキスト入力） */}
               <div>
                 <h3 className="mb-2 text-sm font-semibold">駅</h3>
                 {/* 路線で選ぶ */}
@@ -604,27 +647,49 @@ function ExploreContent() {
                     ))}
                   </div>
                 )}
-                {/* 店舗データから検出された駅 */}
-                {stationList.length > 0 && (
-                  <>
-                    <p className="text-[11px] text-gray-400 mb-1">掲載店の駅:</p>
-                    <div className="flex flex-wrap gap-2">
-                      {stationList.map((st) => (
+                {/* 駅名テキスト検索 */}
+                <div className="relative">
+                  <Input
+                    placeholder="駅名を入力して検索..."
+                    value={stationQuery}
+                    onChange={(e) => setStationQuery(e.target.value)}
+                    className="text-xs h-8"
+                  />
+                  {stationSuggestions.length > 0 && (
+                    <div className="absolute left-0 right-0 top-full mt-1 z-30 rounded-lg border border-gray-200 bg-white shadow-lg max-h-40 overflow-y-auto">
+                      {stationSuggestions.map((st) => (
                         <button
                           key={st}
                           type="button"
-                          onClick={() => handleStationToggle(st)}
-                          className={`rounded-full border px-3 py-1 text-xs transition-colors ${
-                            selectedStations.has(st)
-                              ? "border-[#E06A4E] bg-[#E06A4E] text-white"
-                              : "border-gray-200 hover:border-[#E06A4E]"
+                          onClick={() => {
+                            handleStationToggle(st);
+                            setStationQuery("");
+                          }}
+                          className={`block w-full px-3 py-1.5 text-left text-xs hover:bg-gray-50 transition-colors ${
+                            selectedStations.has(st) ? "text-[#E06A4E] font-medium" : "text-gray-700"
                           }`}
                         >
-                          {st}
+                          {st} {selectedStations.has(st) ? "✓" : ""}
                         </button>
                       ))}
                     </div>
-                  </>
+                  )}
+                </div>
+                {/* 選択中の駅 */}
+                {selectedStations.size > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mt-2">
+                    {Array.from(selectedStations).map((st) => (
+                      <button
+                        key={st}
+                        type="button"
+                        onClick={() => handleStationToggle(st)}
+                        className="inline-flex items-center gap-1 rounded-full border border-[#E06A4E] bg-[#E06A4E] text-white px-2.5 py-0.5 text-xs"
+                      >
+                        {st}
+                        <X className="h-3 w-3" />
+                      </button>
+                    ))}
+                  </div>
                 )}
               </div>
               {/* ジャンル (multi-select) */}
@@ -647,27 +712,48 @@ function ExploreContent() {
                   ))}
                 </div>
               </div>
-              {/* 予算帯 (multi-select) */}
+              {/* 予算帯（下限・上限選択） */}
               <div>
                 <h3 className="mb-2 text-sm font-semibold">予算帯</h3>
-                <div className="flex flex-col gap-2">
-                  {BUDGET_LABELS.map((budget) => (
-                    <button
-                      key={budget.id}
-                      type="button"
-                      onClick={() => handleBudgetToggle(budget.id)}
-                      className={`flex items-center justify-between rounded-lg border px-3 py-2 text-left text-sm transition-colors ${
-                        selectedBudgets.has(budget.id)
-                          ? "border-[#E06A4E] bg-[#E06A4E]/5 text-[#E06A4E]"
-                          : "border-gray-200 hover:border-[#E06A4E]"
-                      }`}
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <label className="text-xs text-gray-500 w-8 shrink-0">下限</label>
+                    <select
+                      className="flex-1 rounded-lg border border-gray-200 px-3 py-1.5 text-xs"
+                      value={budgetMin}
+                      onChange={(e) => {
+                        const val = Number(e.target.value);
+                        setBudgetMin(val);
+                        if (val > 0) trackFilterUse({ filterType: "budget", filterValue: `min_${val}` });
+                      }}
                     >
-                      <span>{budget.label}（{budget.range}）</span>
-                    </button>
-                  ))}
+                      {BUDGET_PRICE_STEPS.map((step) => (
+                        <option key={`min-${step.value}`} value={step.value}>{step.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <label className="text-xs text-gray-500 w-8 shrink-0">上限</label>
+                    <select
+                      className="flex-1 rounded-lg border border-gray-200 px-3 py-1.5 text-xs"
+                      value={budgetMax}
+                      onChange={(e) => {
+                        const val = Number(e.target.value);
+                        setBudgetMax(val);
+                        if (val > 0) trackFilterUse({ filterType: "budget", filterValue: `max_${val}` });
+                      }}
+                    >
+                      {BUDGET_PRICE_STEPS.map((step) => (
+                        <option key={`max-${step.value}`} value={step.value}>{step.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                  {budgetMin > 0 && budgetMax > 0 && budgetMin > budgetMax && (
+                    <p className="text-[11px] text-red-500">下限が上限を超えています</p>
+                  )}
                 </div>
               </div>
-              {/* 気分タグ (multi-select) v6.1追加 */}
+              {/* 気分タグ (multi-select) */}
               <div>
                 <h3 className="mb-2 text-sm font-semibold">気分タグ</h3>
                 <div className="grid grid-cols-2 gap-2">
@@ -740,6 +826,36 @@ function ExploreContent() {
         })}
       </div>
 
+      {/* 現在地から探すボタン */}
+      {!userLocation && (
+        <div className="mt-2">
+          <button
+            type="button"
+            onClick={requestGeolocation}
+            disabled={geoLoading}
+            className="flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-4 py-2 text-xs text-blue-600 hover:bg-blue-100 transition-colors disabled:opacity-60"
+          >
+            {geoLoading ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <MapPin className="h-3.5 w-3.5" />
+            )}
+            <span>{geoLoading ? "位置情報を取得中..." : "現在地から近い順で探す"}</span>
+          </button>
+          {!geoLoading && !geoError && (
+            <p className="mt-1 text-[10px] text-gray-400 ml-1">タップすると位置情報の許可を求めます</p>
+          )}
+        </div>
+      )}
+      {userLocation && sortMode === "distance" && (
+        <div className="mt-2">
+          <span className="inline-flex items-center gap-1 rounded-full bg-green-50 px-2.5 py-1 text-[11px] text-green-600">
+            <MapPin className="h-3 w-3" />
+            現在地を使用中
+          </span>
+        </div>
+      )}
+
       {/* Active filter badges */}
       {activeFilterCount > 0 && (
         <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -760,17 +876,14 @@ function ExploreContent() {
               </Badge>
             </button>
           ))}
-          {Array.from(selectedBudgets).map((budgetId) => {
-            const bl = BUDGET_LABELS.find((b) => b.id === budgetId);
-            return (
-              <button key={`budget-${budgetId}`} type="button" onClick={() => handleBudgetToggle(budgetId)}>
-                <Badge variant="secondary" className="cursor-pointer gap-1 text-[11px]">
-                  {bl ? `${bl.label}（${bl.range}）` : budgetId}
-                  <X className="h-3 w-3" />
-                </Badge>
-              </button>
-            );
-          })}
+          {hasBudgetFilter && (
+            <button type="button" onClick={() => { setBudgetMin(0); setBudgetMax(0); }}>
+              <Badge variant="secondary" className="cursor-pointer gap-1 text-[11px]">
+                予算: {budgetMin > 0 ? `${budgetMin.toLocaleString()}円` : "指定なし"}〜{budgetMax > 0 ? `${budgetMax.toLocaleString()}円` : "指定なし"}
+                <X className="h-3 w-3" />
+              </Badge>
+            </button>
+          )}
           {Array.from(selectedThemes).map((theme) => (
             <button key={`theme-${theme}`} type="button" onClick={() => handleThemeToggle(theme)}>
               <Badge variant="secondary" className="cursor-pointer gap-1 text-[11px]">
@@ -852,7 +965,7 @@ function ExploreContent() {
       )}
 
       {/* Geo fallback: station-based filter when geolocation denied */}
-      {sortMode === "distance" && geoError && (
+      {geoError && (
         <div className="mt-2 rounded-lg border border-orange-200 bg-orange-50 p-3">
           <p className="text-xs text-orange-600 mb-2">{geoError}</p>
           <p className="text-xs text-gray-500 mb-1.5">代わりに駅で絞り込めます：</p>
@@ -879,29 +992,46 @@ function ExploreContent() {
       )}
 
       {/* Map View */}
-      {isLoaded && viewMode === "map" && (
-        <div className="mt-3">
-          {filteredAndSortedShops.length > 0 ? (
-            <MapView
-              shops={filteredAndSortedShops
-                .filter((s) => s.basic_info?.latitude != null && s.basic_info?.longitude != null)
-                .map((s) => ({
-                  slug: s.slug,
-                  name: s.name,
-                  area: s.area,
-                  category: s.category,
-                  latitude: s.basic_info!.latitude!,
-                  longitude: s.basic_info!.longitude!,
-                }))}
-              onShopClick={(slug) => router.push(`/shops/${slug}`)}
-            />
-          ) : (
-            <div className="flex h-[400px] items-center justify-center rounded-xl border border-gray-200 bg-gray-50">
-              <p className="text-sm text-gray-400">表示するお店がありません</p>
-            </div>
-          )}
-        </div>
-      )}
+      {isLoaded && viewMode === "map" && (() => {
+        const mapShops = filteredAndSortedShops
+          .filter((s) => s.basic_info?.latitude != null && s.basic_info?.longitude != null)
+          .map((s) => ({
+            slug: s.slug,
+            name: s.name,
+            area: s.area,
+            category: s.category,
+            latitude: s.basic_info!.latitude!,
+            longitude: s.basic_info!.longitude!,
+          }));
+        const shopsWithoutGeo = filteredAndSortedShops.filter(
+          (s) => s.basic_info?.latitude == null || s.basic_info?.longitude == null
+        );
+        return (
+          <div className="mt-3">
+            {mapShops.length > 0 ? (
+              <MapView
+                shops={mapShops}
+                onShopClick={(slug) => router.push(`/shops/${slug}`)}
+              />
+            ) : (
+              <div className="flex h-[400px] items-center justify-center rounded-xl border border-gray-200 bg-gray-50">
+                <div className="text-center px-4">
+                  <p className="text-sm text-gray-500 font-medium">
+                    {filteredAndSortedShops.length === 0
+                      ? "表示するお店がありません"
+                      : "地図に表示できるお店がありません"}
+                  </p>
+                  {shopsWithoutGeo.length > 0 && (
+                    <p className="text-xs text-gray-400 mt-1">
+                      {shopsWithoutGeo.length}件のお店に位置情報がありません
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Shop list - HorizontalCard */}
       {isLoaded && viewMode === "list" && filteredAndSortedShops.length > 0 && (
@@ -961,7 +1091,7 @@ function ExploreContent() {
               {selectedStations.size > 0 && (
                 <p>駅の条件を外すと見つかるかもしれません</p>
               )}
-              {selectedBudgets.size > 0 && (
+              {hasBudgetFilter && (
                 <p className="mt-1">予算帯を広げてみましょう</p>
               )}
               {selectedThemes.size > 0 && (

@@ -311,12 +311,14 @@ function AddressFields({
 
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="space-y-1.5">
-          <label className="text-xs text-muted-foreground">都道府県</label>
+          <label className="text-xs text-muted-foreground">
+            都道府県 <span className="text-destructive">*</span>
+          </label>
           <Select
             value={prefecture}
             onValueChange={(v) => onChange("prefecture", v)}
           >
-            <SelectTrigger className="w-full">
+            <SelectTrigger className={`w-full ${errors.prefecture ? "border-red-300" : ""}`}>
               <SelectValue placeholder="都道府県を選択" />
             </SelectTrigger>
             <SelectContent>
@@ -327,6 +329,9 @@ function AddressFields({
               ))}
             </SelectContent>
           </Select>
+          {errors.prefecture && (
+            <p className="text-xs text-red-500">{errors.prefecture}</p>
+          )}
         </div>
 
         <div className="space-y-1.5">
@@ -721,10 +726,12 @@ function NearestStationDetector({
   fullAddress,
   detectedStation,
   onStationDetected,
+  onGeoDetected,
 }: {
   fullAddress: string;
   detectedStation: string;
   onStationDetected: (station: string) => void;
+  onGeoDetected?: (data: { lat: number; lng: number; station: string; walkMinutes: number }) => void;
 }) {
   const [isDetecting, setIsDetecting] = useState(false);
   const [stations, setStations] = useState<GeoStation[]>([]);
@@ -755,6 +762,14 @@ function NearestStationDetector({
         setStations(data.nearestStations.slice(0, 3));
         const nearest = data.nearestStations[0];
         onStationDetected(nearest.station);
+        if (data.lat != null && data.lng != null) {
+          onGeoDetected?.({
+            lat: data.lat,
+            lng: data.lng,
+            station: nearest.station,
+            walkMinutes: nearest.walkMinutes,
+          });
+        }
       } else {
         setGeoError("最寄り駅が見つかりませんでした");
       }
@@ -764,7 +779,7 @@ function NearestStationDetector({
     } finally {
       setIsDetecting(false);
     }
-  }, [fullAddress, onStationDetected]);
+  }, [fullAddress, onStationDetected, onGeoDetected]);
 
   return (
     <div className="space-y-2">
@@ -911,6 +926,7 @@ function useShopForm(initial: {
     if (!name.trim()) errors.name = "店舗名を入力してください";
     if (!ownerName.trim()) errors.ownerName = "ニックネームを入力してください";
     if (!category) errors.category = "カテゴリーを選択してください";
+    if (!addrPref) errors.prefecture = "都道府県を選択してください";
     if (!addrCity.trim()) errors.city = "市区町村を入力してください";
     if (!addrStreet.trim()) errors.street = "町名番地を入力してください";
 
@@ -953,6 +969,7 @@ function useShopForm(initial: {
     name.trim() &&
     ownerName.trim() &&
     category &&
+    addrPref &&
     addrCity.trim() &&
     addrStreet.trim() &&
     phoneParts[0] &&
@@ -1011,6 +1028,7 @@ function ShopRegistrationForm({
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [regError, setRegError] = useState<string | null>(null);
+  const [geoData, setGeoData] = useState<{ lat: number; lng: number; station: string; walkMinutes: number } | null>(null);
 
   async function handleRegister() {
     if (isSubmitting) return;
@@ -1030,12 +1048,20 @@ function ShopRegistrationForm({
           area: form.area || form.addrCity.trim(),
           description: form.description.trim() || null,
           address: form.fullAddress,
+          address_prefecture: form.addrPref || null,
+          address_city: form.addrCity.trim() || null,
+          address_street: form.addrStreet.trim() || null,
+          address_building: form.addrBuilding.trim() || null,
           phone: form.fullPhone,
           hours: form.hoursJson,
           holidays: form.holidaysJson,
           tabelog_url: form.tabelogUrl.trim() || null,
           gmb_url: form.gmbUrl.trim() || null,
           homepage_url: form.homepageUrl.trim() || null,
+          nearest_station: geoData?.station || form.area || null,
+          latitude: geoData?.lat || null,
+          longitude: geoData?.lng || null,
+          walking_minutes: geoData?.walkMinutes || null,
         }),
       });
 
@@ -1213,6 +1239,7 @@ function ShopRegistrationForm({
             fullAddress={form.fullAddress}
             detectedStation={form.area}
             onStationDetected={form.setArea}
+            onGeoDetected={setGeoData}
           />
 
           {/* 電話番号 */}
@@ -1476,6 +1503,7 @@ function ShopEditForm({
   onShopUpdated: (s: ShopData) => void;
 }) {
   const form = useShopForm(initialValues);
+  const [geoData, setGeoData] = useState<{ lat: number; lng: number; station: string; walkMinutes: number } | null>(null);
 
   async function handleSave() {
     if (isSaving) return;
@@ -1498,12 +1526,20 @@ function ShopEditForm({
           area: form.area || form.addrCity.trim(),
           description: form.description.trim() || null,
           address: form.fullAddress || null,
+          address_prefecture: form.addrPref || null,
+          address_city: form.addrCity.trim() || null,
+          address_street: form.addrStreet.trim() || null,
+          address_building: form.addrBuilding.trim() || null,
           phone: form.fullPhone || null,
           hours: form.hoursJson || null,
           holidays: form.holidaysJson || null,
           tabelog_url: form.tabelogUrl.trim() || null,
           gmb_url: form.gmbUrl.trim() || null,
           homepage_url: form.homepageUrl.trim() || null,
+          nearest_station: geoData?.station || form.area || null,
+          latitude: geoData?.lat || null,
+          longitude: geoData?.lng || null,
+          walking_minutes: geoData?.walkMinutes || null,
         }),
       });
       if (!res.ok) {
@@ -1714,6 +1750,7 @@ function ShopEditForm({
             fullAddress={form.fullAddress}
             detectedStation={form.area}
             onStationDetected={form.setArea}
+            onGeoDetected={setGeoData}
           />
         </CardContent>
       </Card>

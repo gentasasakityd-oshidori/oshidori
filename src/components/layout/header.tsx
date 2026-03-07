@@ -90,18 +90,36 @@ export function Header() {
         </Link>
 
         {/* デスクトップナビ */}
-        <nav className="hidden items-center gap-6 md:flex">
+        <nav className="hidden items-center gap-1 md:flex">
           <Link
             href="/explore"
-            className="text-sm text-muted-foreground transition-colors hover:text-foreground"
+            className="rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:text-foreground hover:bg-accent"
           >
             お店を探す
           </Link>
           <Link
             href="/stories"
-            className="text-sm text-muted-foreground transition-colors hover:text-foreground"
+            className="rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:text-foreground hover:bg-accent"
           >
             ストーリー
+          </Link>
+          <Link
+            href="/oshi"
+            className="rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:text-foreground hover:bg-accent"
+          >
+            推し店
+          </Link>
+          <Link
+            href="/home#forecast"
+            className="rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:text-foreground hover:bg-accent"
+          >
+            相性予報
+          </Link>
+          <Link
+            href="/for-shops"
+            className="rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:text-foreground hover:bg-accent"
+          >
+            飲食店の方へ
           </Link>
         </nav>
 
@@ -181,11 +199,25 @@ export function Header() {
                 ストーリー
               </Link>
               <Link
+                href="/oshi"
+                className="text-lg font-medium"
+                onClick={() => setIsOpen(false)}
+              >
+                推し店
+              </Link>
+              <Link
                 href="/mypage"
                 className="text-lg font-medium"
                 onClick={() => setIsOpen(false)}
               >
-                マイコレクション
+                マイページ
+              </Link>
+              <Link
+                href="/for-shops"
+                className="text-base text-muted-foreground"
+                onClick={() => setIsOpen(false)}
+              >
+                飲食店オーナーの方へ
               </Link>
               <div className="mt-4 border-t pt-4">
                 {user ? (
