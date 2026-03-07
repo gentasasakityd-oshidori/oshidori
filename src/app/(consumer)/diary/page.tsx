@@ -6,7 +6,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { Camera, Calendar, ChevronRight, Plus, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { VISIT_MOOD_TAGS } from "@/lib/constants";
+import { VISIT_MOOD_TAGS, EMOTION_TAGS } from "@/lib/constants";
 import type { VisitRecordWithShop } from "@/types/database";
 import { FanLetterModal } from "./fan-letter-modal";
 
@@ -38,6 +38,7 @@ export default function DiaryPage() {
   }, [router]);
 
   const moodTagMap = Object.fromEntries(VISIT_MOOD_TAGS.map((t) => [t.id, t]));
+  const emotionTagMap = Object.fromEntries(EMOTION_TAGS.map((t) => [t.id, t]));
 
   if (loading) {
     return (
@@ -94,6 +95,8 @@ export default function DiaryPage() {
               ? visit.mood_tags
               : visit.mood_tag ? [visit.mood_tag] : [];
             const moods = moodIds.map((id) => moodTagMap[id]).filter(Boolean);
+            const emotionIds: string[] = Array.isArray(visit.emotion_tags) ? visit.emotion_tags : [];
+            const emotions = emotionIds.map((id) => emotionTagMap[id]).filter(Boolean);
             return (
               <div
                 key={visit.id}
@@ -141,6 +144,16 @@ export default function DiaryPage() {
                         {moods.map((mood) => (
                           <span key={mood.id} className="inline-flex items-center gap-0.5 rounded-full bg-orange-50 px-2 py-0.5 text-[11px] text-[#E06A4E]">
                             {mood.emoji} {mood.label}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+
+                    {emotions.length > 0 && (
+                      <div className="mt-1 flex flex-wrap gap-1">
+                        {emotions.map((emotion) => (
+                          <span key={emotion.id} className="inline-flex items-center gap-0.5 rounded-full bg-blue-50 px-2 py-0.5 text-[11px] text-blue-600">
+                            {emotion.emoji} {emotion.label}
                           </span>
                         ))}
                       </div>

@@ -148,14 +148,16 @@ export async function POST(request: NextRequest) {
     const {
       name, owner_name, owner_real_name,
       category, description,
-      // 構造化住所
-      address_prefecture, address_city, address_street, address_building,
+      // 構造化住所（addressはレガシー、address_*が新形式）
+      address, address_prefecture, address_city, address_street, address_building,
       // 電話（結合済みまたは分割）
       phone,
       // 営業時間・定休日（JSON形式）
       hours, holidays,
       // 外部URL
-      tabelog_url, gmb_url, website_url,
+      tabelog_url, gmb_url, website_url, homepage_url,
+      // エリア（最寄り駅）
+      area,
       // ジオコーディング結果（フロントから渡される）
       nearest_station, latitude, longitude, walking_minutes,
     } = body;
@@ -166,9 +168,23 @@ export async function POST(request: NextRequest) {
     if (!owner_name?.trim()) errors.push("ニックネーム（公開名）は必須です");
     if (!category) errors.push("カテゴリーは必須です");
 
-    // 構造化住所バリデーション
-    const addrResult = validateStructuredAddress(address_prefecture, address_city, address_street);
-    if (!addrResult.valid) errors.push(addrResult.error!);
+    // 住所バリデーション（構造化 or レガシー）
+    let fullAddress = "";
+    if (address_prefecture || address_city || address_street) {
+      // 構造化住所を優先
+      const addrResult = validateStructuredAddress(address_prefecture, address_city, address_street);
+      if (!addrResult.valid) {
+        errors.push(addrResult.error!);
+      } else {
+        fullAddress = addrResult.fullAddress;
+        if (address_building?.trim()) fullAddress += " " + address_building.trim();
+      }
+    } else if (address) {
+      // レガシー形式（address文字列）
+      fullAddress = address.trim();
+    } else {
+      errors.push("住所は必須です");
+    }
 
     // 電話番号バリデーション
     const phoneResult = validatePhone(phone ?? "");
@@ -183,16 +199,14 @@ export async function POST(request: NextRequest) {
     // URL バリデーション
     if (!validateUrl(tabelog_url)) errors.push("食べログURLの形式が不正です");
     if (!validateUrl(gmb_url)) errors.push("GoogleマップURLの形式が不正です");
-    if (!validateUrl(website_url)) errors.push("ホームページURLの形式が不正です");
+    if (!validateUrl(homepage_url)) errors.push("ホームページURLの形式が不正です");
 
     if (errors.length > 0) {
       return NextResponse.json({ error: errors.join("、") }, { status: 400 });
     }
 
-    // 結合住所
-    const fullAddress = `${address_prefecture}${address_city?.trim() ?? ""}${address_street?.trim() ?? ""}${address_building?.trim() ? " " + address_building.trim() : ""}`;
     // 最寄り駅をareaに使う（後方互換）
-    const area = nearest_station || address_city?.trim() || "";
+    const areaValue = area || nearest_station || address_city?.trim() || "";
 
     // slug生成
     const slug = name
@@ -212,9 +226,9 @@ export async function POST(request: NextRequest) {
         owner_name: owner_name.trim(),
         owner_real_name: owner_real_name?.trim() || null,
         category,
-        area,
+        area: areaValue,
         description: description?.trim() || null,
-        address: fullAddress.trim(),
+        address: fullAddress,
         address_prefecture: address_prefecture || null,
         address_city: address_city?.trim() || null,
         address_street: address_street?.trim() || null,
@@ -224,7 +238,7 @@ export async function POST(request: NextRequest) {
         holidays: typeof holidays === "object" ? JSON.stringify(holidays) : holidays?.trim() ?? null,
         tabelog_url: tabelog_url?.trim() || null,
         gmb_url: gmb_url?.trim() || null,
-        website_url: website_url?.trim() || null,
+        homepage_url: homepage_url?.trim() || null,
         owner_id: user.id,
         is_published: false,
       } as never)
@@ -292,13 +306,21 @@ export async function PATCH(request: NextRequest) {
     }
 
     // 構造化住所更新
-    if ("address_prefecture" in updates || "address_city" in updates || "address_street" in updates) {
+    if ("address" in updates && updates.address) {
+      // レガシー形式（address文字列）をそのまま使用
+    } else if ("address_prefecture" in updates || "address_city" in updates || "address_street" in updates) {
       const pref = updates.address_prefecture;
       const city = updates.address_city;
       const street = updates.address_street;
       const building = updates.address_building || "";
-      if (pref && city && street) {
-        updates.address = `${pref}${city.trim()}${street.trim()}${building.trim() ? " " + building.trim() : ""}`;
+      if (pref || city || street) {
+        const addrResult = validateStructuredAddress(pref, city, street);
+        if (!addrResult.valid) {
+          errors.push(addrResult.error!);
+        } else {
+          updates.address = addrResult.fullAddress;
+          if (building?.trim()) updates.address += " " + building.trim();
+        }
       }
     }
 
@@ -321,7 +343,7 @@ export async function PATCH(request: NextRequest) {
     // URL バリデーション
     if ("tabelog_url" in updates && !validateUrl(updates.tabelog_url)) errors.push("食べログURLの形式が不正です");
     if ("gmb_url" in updates && !validateUrl(updates.gmb_url)) errors.push("GoogleマップURLの形式が不正です");
-    if ("website_url" in updates && !validateUrl(updates.website_url)) errors.push("ホームページURLの形式が不正です");
+    if ("homepage_url" in updates && !validateUrl(updates.homepage_url)) errors.push("ホームページURLの形式が不正です");
 
     if (errors.length > 0) {
       return NextResponse.json({ error: errors.join("、") }, { status: 400 });

@@ -4,6 +4,8 @@ import { useState, useEffect } from "react";
 import { ScrollText, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
+export const dynamic = "force-dynamic";
+
 interface LogEntry {
   timestamp: string;
   action: string;

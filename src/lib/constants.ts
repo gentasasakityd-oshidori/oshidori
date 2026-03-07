@@ -200,3 +200,17 @@ export const MOOD_TAGS = [
 ] as const;
 
 export type MoodTagValue = (typeof MOOD_TAGS)[number]["value"];
+
+// 感情タグ（体験記録時に選択、v6.1追加）
+export const EMOTION_TAGS = [
+  { id: "happy", label: "幸せな気持ちになった", emoji: "😊" },
+  { id: "want_again", label: "また来たい", emoji: "🔄" },
+  { id: "tell_someone", label: "誰かに教えたい", emoji: "📣" },
+  { id: "talked_owner", label: "店主と話せた", emoji: "💬" },
+  { id: "new_discovery", label: "新しい発見があった", emoji: "💡" },
+  { id: "treat_myself", label: "自分へのご褒美になった", emoji: "🎁" },
+  { id: "quiet_time", label: "静かに過ごせた", emoji: "☕" },
+  { id: "usual_taste", label: "いつもの味で安心", emoji: "🏠" },
+] as const;
+
+export type EmotionTagId = (typeof EMOTION_TAGS)[number]["id"];

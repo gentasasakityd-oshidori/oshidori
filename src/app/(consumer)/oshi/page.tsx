@@ -34,10 +34,16 @@ import { trackCollectionShare } from "@/lib/tracking";
 import { ShareButtons } from "@/components/share-buttons";
 import { FanLetterModal } from "@/app/(consumer)/diary/fan-letter-modal";
 import type { Shop, Story, VisitRecordWithShop } from "@/types/database";
+import dynamic from "next/dynamic";
+import { MapPin, List } from "lucide-react";
+
+const MapView = dynamic(() => import("@/components/map-view").then(m => m.MapView), { ssr: false });
 
 type OshiShopWithRelations = Shop & {
   stories: Story[];
   _count: { empathy: number };
+  latitude?: number | null;
+  longitude?: number | null;
 };
 
 type EmpathyHistoryItem = {
@@ -91,6 +97,8 @@ export default function OshiPage() {
   // ダイアリー関連
   const [diaryVisits, setDiaryVisits] = useState<VisitRecordWithShop[]>([]);
   const [fanLetterTarget, setFanLetterTarget] = useState<VisitRecordWithShop | null>(null);
+  // 推し店マップ/リスト表示切り替え
+  const [oshiViewMode, setOshiViewMode] = useState<"list" | "map">("list");
 
   useEffect(() => {
     async function loadData() {
@@ -416,6 +424,58 @@ export default function OshiPage() {
       {activeTab === "oshi" && <>
       <section className="px-4 py-6">
         <div className="mx-auto max-w-3xl">
+          {/* リスト/マップ切り替え */}
+          {oshiShops.length > 0 && (
+            <div className="flex justify-end mb-3">
+              <div className="inline-flex rounded-lg border border-gray-200 p-0.5">
+                <button
+                  onClick={() => setOshiViewMode("list")}
+                  className={`flex items-center gap-1 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                    oshiViewMode === "list" ? "bg-[#E06A4E] text-white" : "text-gray-500 hover:text-gray-700"
+                  }`}
+                >
+                  <List className="h-3.5 w-3.5" />
+                  リスト
+                </button>
+                <button
+                  onClick={() => setOshiViewMode("map")}
+                  className={`flex items-center gap-1 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                    oshiViewMode === "map" ? "bg-[#E06A4E] text-white" : "text-gray-500 hover:text-gray-700"
+                  }`}
+                >
+                  <MapPin className="h-3.5 w-3.5" />
+                  マップ
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* マップビュー */}
+          {oshiViewMode === "map" && oshiShops.length > 0 && (
+            <div className="mb-4">
+              <div className="h-[400px] rounded-xl overflow-hidden border border-gray-200">
+                <MapView
+                  shops={oshiShops
+                    .filter((s) => s.latitude && s.longitude)
+                    .map((s) => ({
+                      slug: s.slug,
+                      name: s.name,
+                      area: s.area ?? "",
+                      category: s.category ?? "",
+                      latitude: s.latitude!,
+                      longitude: s.longitude!,
+                    }))}
+                  onShopClick={(slug) => router.push(`/shops/${slug}`)}
+                />
+              </div>
+              {oshiShops.filter((s) => !s.latitude || !s.longitude).length > 0 && (
+                <p className="mt-2 text-[11px] text-gray-400 text-center">
+                  位置情報のない店舗はマップに表示されません
+                </p>
+              )}
+            </div>
+          )}
+
           {oshiShops.length === 0 ? (
             <div className="rounded-xl border border-dashed border-primary/20 bg-warm/30 p-8 text-center">
               <Heart className="mx-auto h-12 w-12 text-primary/30" />

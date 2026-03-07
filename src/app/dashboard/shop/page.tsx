@@ -737,6 +737,7 @@ function NearestStationDetector({
     }
     setIsDetecting(true);
     setGeoError(null);
+    setStations([]);
     try {
       const res = await fetch("/api/geocode", {
         method: "POST",
@@ -744,7 +745,7 @@ function NearestStationDetector({
         body: JSON.stringify({ address: fullAddress }),
       });
       if (!res.ok) {
-        const data = await res.json();
+        const data = await res.json().catch(() => ({ error: "検出に失敗しました" }));
         setGeoError(data.error || "検出に失敗しました");
         setIsDetecting(false);
         return;
@@ -757,10 +758,12 @@ function NearestStationDetector({
       } else {
         setGeoError("最寄り駅が見つかりませんでした");
       }
-    } catch {
+    } catch (err) {
+      console.error("Station detection error:", err);
       setGeoError("ネットワークエラーが発生しました");
+    } finally {
+      setIsDetecting(false);
     }
-    setIsDetecting(false);
   }, [fullAddress, onStationDetected]);
 
   return (

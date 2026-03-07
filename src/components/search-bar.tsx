@@ -32,11 +32,21 @@ export function SearchBar() {
           `/explore?sort=distance&lat=${pos.coords.latitude}&lng=${pos.coords.longitude}`,
         );
       },
-      () => {
+      (error) => {
         setLocating(false);
-        alert("位置情報の取得に失敗しました。設定から位置情報の許可をご確認ください。");
+        if (error.code === error.PERMISSION_DENIED) {
+          alert("位置情報の使用が拒否されました。ブラウザの設定から位置情報の許可をオンにしてください。");
+        } else if (error.code === error.TIMEOUT) {
+          alert("位置情報の取得がタイムアウトしました。もう一度お試しください。");
+        } else {
+          alert("位置情報の取得に失敗しました。設定から位置情報の許可をご確認ください。");
+        }
       },
-      { timeout: 10000 },
+      {
+        enableHighAccuracy: false,
+        timeout: 30000,
+        maximumAge: 300000,
+      },
     );
   }
 

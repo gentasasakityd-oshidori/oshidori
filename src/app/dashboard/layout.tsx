@@ -7,23 +7,17 @@ import { useState, useEffect } from "react";
 import {
   LayoutDashboard,
   BookOpen,
-  UtensilsCrossed,
   Store,
   Mic,
-  QrCode,
   MessageCircle,
-  Users,
-  Camera,
   Menu,
   X,
   ChevronLeft,
   LogOut,
   User,
-  CalendarClock,
-  Megaphone,
-  Share2,
-  Plug,
   Crown,
+  Bot,
+  FileEdit,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet";
@@ -37,76 +31,61 @@ import {
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 
+// サブページ → 親タブのマッピング（旧ルートを新タブに紐付け）
+const ROUTE_GROUP_MAP: Record<string, string> = {
+  "/dashboard/stories": "/dashboard/content",
+  "/dashboard/menus": "/dashboard/content",
+  "/dashboard/updates": "/dashboard/content",
+  "/dashboard/photos": "/dashboard/content",
+  "/dashboard/sns-hub": "/dashboard/content",
+  "/dashboard/fans": "/dashboard/interaction",
+  "/dashboard/fan-letters": "/dashboard/interaction",
+  "/dashboard/messages": "/dashboard/interaction",
+  "/dashboard/reservations": "/dashboard/interaction",
+  "/dashboard/shop": "/dashboard/settings",
+  "/dashboard/qrcode": "/dashboard/settings",
+  "/dashboard/integrations": "/dashboard/settings",
+  "/dashboard/interview": "/dashboard/ai",
+};
+
+// ── 第1層: 日常タスク（最頻使用）──────────────────
+// ── 第2層: 設定・管理（週1回程度）──────────────────
 const NAV_ITEMS = [
+  // 第1層
   {
     href: "/dashboard",
-    label: "ダッシュボード",
+    label: "ホーム",
     icon: LayoutDashboard,
   },
   {
-    href: "/dashboard/stories",
-    label: "ストーリー管理",
-    icon: BookOpen,
+    href: "/dashboard/content",
+    label: "コンテンツ",
+    icon: FileEdit,
+    // 統合: ストーリー管理、近況更新、食べてほしい一品、写真撮影、SNS配信ハブ
   },
   {
-    href: "/dashboard/menus",
-    label: "食べてほしい一品",
-    icon: UtensilsCrossed,
-  },
-  {
-    href: "/dashboard/shop",
-    label: "店舗情報",
-    icon: Store,
-  },
-  {
-    href: "/dashboard/messages",
-    label: "メッセージ配信",
+    href: "/dashboard/interaction",
+    label: "お客さんとの交流",
     icon: MessageCircle,
+    // 統合: ファン一覧、ファンレター、メッセージ配信、予約打診管理
+  },
+  // 第2層
+  {
+    href: "/dashboard/settings",
+    label: "店舗設定",
+    icon: Store,
+    // 統合: 店舗情報、QRコード、外部連携
   },
   {
-    href: "/dashboard/fans",
-    label: "ファン一覧",
-    icon: Users,
+    href: "/dashboard/ai",
+    label: "AI機能",
+    icon: Bot,
+    // 統合: AIインタビュー、AI提案履歴
   },
   {
     href: "/dashboard/fan-club",
     label: "ファンクラブ運営",
     icon: Crown,
-  },
-  {
-    href: "/dashboard/photos",
-    label: "写真撮影",
-    icon: Camera,
-  },
-  {
-    href: "/dashboard/reservations",
-    label: "予約打診管理",
-    icon: CalendarClock,
-  },
-  {
-    href: "/dashboard/updates",
-    label: "近況更新",
-    icon: Megaphone,
-  },
-  {
-    href: "/dashboard/sns-hub",
-    label: "SNS配信ハブ",
-    icon: Share2,
-  },
-  {
-    href: "/dashboard/interview",
-    label: "AIインタビュー",
-    icon: Mic,
-  },
-  {
-    href: "/dashboard/qrcode",
-    label: "QRコード",
-    icon: QrCode,
-  },
-  {
-    href: "/dashboard/integrations",
-    label: "外部連携",
-    icon: Plug,
   },
 ];
 
@@ -150,24 +129,37 @@ function SidebarContent({
       <Separator />
 
       {/* ナビゲーション */}
-      <nav className="flex-1 space-y-1 px-3 py-4">
-        {NAV_ITEMS.map((item) => {
-          const isActive = pathname === item.href;
+      <nav className="flex-1 px-3 py-4">
+        {NAV_ITEMS.map((item, index) => {
+          // 現在のパスが直接一致するか、サブルートがこのタブにグループされているか
+          const mappedParent = ROUTE_GROUP_MAP[pathname];
+          const isActive = item.href === "/dashboard"
+            ? pathname === "/dashboard"
+            : pathname === item.href || pathname.startsWith(item.href + "/") || mappedParent === item.href;
           return (
-            <Link
-              key={item.href}
-              href={item.href}
-              onClick={onNavigate}
-              className={cn(
-                "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
-                isActive
-                  ? "bg-primary/10 text-primary"
-                  : "text-muted-foreground hover:bg-warm hover:text-foreground"
+            <div key={item.href}>
+              {/* 第1層と第2層の区切り */}
+              {index === 3 && (
+                <div className="my-3 border-t border-border/50 pt-2">
+                  <span className="px-3 text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">
+                    設定・管理
+                  </span>
+                </div>
               )}
-            >
-              <item.icon className="h-4 w-4" />
-              {item.label}
-            </Link>
+              <Link
+                href={item.href}
+                onClick={onNavigate}
+                className={cn(
+                  "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors mb-1",
+                  isActive
+                    ? "bg-primary/10 text-primary"
+                    : "text-muted-foreground hover:bg-warm hover:text-foreground"
+                )}
+              >
+                <item.icon className="h-4 w-4" />
+                {item.label}
+              </Link>
+            </div>
           );
         })}
       </nav>

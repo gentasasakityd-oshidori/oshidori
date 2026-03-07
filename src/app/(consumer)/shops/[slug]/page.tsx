@@ -24,6 +24,7 @@ import { StoryReader } from "@/components/story-reader";
 
 const EngagementPrompt = dynamic(() => import("@/components/engagement-prompt").then(m => m.EngagementPrompt), { ssr: false });
 const ExperienceProfile = dynamic(() => import("@/components/experience-profile").then(m => m.ExperienceProfile), { ssr: false });
+const CheckinOshiFlow = dynamic(() => import("@/components/checkin-oshi-flow").then(m => m.CheckinOshiFlow), { ssr: false });
 import { trackStoryViewStart, trackStoryScrollDepth, trackQRAccess, trackUserLastAction } from "@/lib/tracking";
 
 export default function ShopDetailPage() {
@@ -57,6 +58,10 @@ export default function ShopDetailPage() {
   // ファンクラブ
   const [fanClubPlan, setFanClubPlan] = useState<{ plan_name: string; price: number; description: string | null; benefits: unknown } | null>(null);
   const [photoIndex, setPhotoIndex] = useState(0);
+  // コンテンツタブ
+  const [activeContentTab, setActiveContentTab] = useState<"story" | "menu" | "info">("story");
+  // チェックイン同時フロー
+  const [showCheckinFlow, setShowCheckinFlow] = useState(false);
   // マイクロインタラクション
   const [floatingHearts, setFloatingHearts] = useState<Array<{ id: number; x: number; delay: number }>>([]);
   const [confettiParticles, setConfettiParticles] = useState<Array<{ id: number; x: number; y: number; color: string }>>([]);
@@ -69,6 +74,13 @@ export default function ShopDetailPage() {
     const supabase = createClient();
     supabase.auth.getUser().then(({ data: { user } }) => {
       setIsAuthenticated(!!user);
+      // QRコード経由: ログイン済みならチェックインフロー表示
+      if (user && typeof window !== "undefined") {
+        const params = new URLSearchParams(window.location.search);
+        if (params.get("from") === "qr") {
+          setShowCheckinFlow(true);
+        }
+      }
     });
     // QRコード経由アクセスのトラッキング
     if (typeof window !== "undefined") {
@@ -588,9 +600,35 @@ export default function ShopDetailPage() {
         </section>
       )}
 
-      {/* ストーリーセクション - インライン展開 */}
-      {mainStory && (
-        <section className="border-t border-gray-100 px-4 py-5">
+      {/* コンテンツタブ */}
+      <div className="border-t border-gray-100">
+        <div className="flex">
+          {(["story", "menu", "info"] as const).map((tab) => {
+            const labels = { story: "ストーリー", menu: "メニュー", info: "店舗情報" };
+            const icons = { story: "📖", menu: "🍽", info: "📍" };
+            return (
+              <button
+                key={tab}
+                onClick={() => setActiveContentTab(tab)}
+                className={`flex-1 py-3 text-center text-sm font-medium transition-colors relative ${
+                  activeContentTab === tab ? "text-[#E06A4E]" : "text-gray-400 hover:text-gray-600"
+                }`}
+              >
+                <span className="flex items-center justify-center gap-1">
+                  {icons[tab]} {labels[tab]}
+                </span>
+                {activeContentTab === tab && (
+                  <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#E06A4E] rounded-full" />
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ストーリータブ */}
+      {activeContentTab === "story" && mainStory && (
+        <section className="px-4 py-5">
           <h2 className="text-sm font-bold text-[#2C3E50] mb-1">このお店のストーリー</h2>
           <p className="text-[11px] text-gray-400 mb-3 flex items-center gap-1">
             <Sparkles className="h-3 w-3" />
@@ -722,11 +760,11 @@ export default function ShopDetailPage() {
       )}
 
       {/* 体験プロファイル — 来店者の声から見える魅力 */}
-      <ExperienceProfile shopSlug={slug} />
+      {activeContentTab === "story" && <ExperienceProfile shopSlug={slug} />}
 
-      {/* 食べてほしい一品 */}
-      {shop.menus.length > 0 && (
-        <section className="border-t border-gray-100 px-4 py-5">
+      {/* メニュータブ */}
+      {activeContentTab === "menu" && shop.menus.length > 0 && (
+        <section className="px-4 py-5">
           <h2 className="text-sm font-bold text-[#2C3E50] mb-3">食べてほしい一品</h2>
           <div className="space-y-4">
             {shop.menus.map((menu) => (
@@ -762,9 +800,17 @@ export default function ShopDetailPage() {
           </div>
         </section>
       )}
+      {activeContentTab === "menu" && shop.menus.length === 0 && (
+        <section className="px-4 py-5">
+          <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50/50 p-8 text-center">
+            <p className="text-sm text-muted-foreground">メニュー情報は準備中です</p>
+          </div>
+        </section>
+      )}
 
-      {/* 店舗情報 */}
-      <section className="border-t border-gray-100 px-4 py-5">
+      {/* 店舗情報タブ */}
+      {activeContentTab === "info" && (
+      <section className="px-4 py-5">
         <h2 className="text-sm font-bold text-[#2C3E50] mb-3">店舗情報</h2>
         <div className="space-y-3">
           {/* 価格帯 */}
@@ -834,6 +880,7 @@ export default function ShopDetailPage() {
           </div>
         )}
       </section>
+      )}
 
       {/* 予約打診 */}
       <section className="border-t border-gray-100 px-4 py-5">
@@ -926,30 +973,7 @@ export default function ShopDetailPage() {
         </section>
       )}
 
-      {/* 推しチップ */}
-      <section className="border-t border-gray-100 px-4 py-5">
-        <h2 className="text-sm font-bold text-[#2C3E50] mb-2">☕ 推しチップ</h2>
-        <p className="text-xs text-gray-500 mb-3">
-          推し店の店主に感謝の気持ちを伝えよう
-        </p>
-        <div className="flex gap-2">
-          {[100, 300, 500, 1000].map((amount) => (
-            <button
-              key={amount}
-              disabled
-              className="flex-1 rounded-xl border border-amber-200 bg-amber-50/50 py-3 text-center transition-all opacity-60 cursor-not-allowed"
-            >
-              <span className="block text-sm font-bold text-amber-700">¥{amount.toLocaleString()}</span>
-              <span className="block text-[10px] text-amber-500 mt-0.5">
-                {amount <= 100 ? "☕" : amount <= 300 ? "🍰" : amount <= 500 ? "🍽" : "🎁"}
-              </span>
-            </button>
-          ))}
-        </div>
-        <p className="mt-2.5 text-[11px] text-gray-400 text-center">
-          💳 決済機能は近日公開予定です
-        </p>
-      </section>
+      {/* 推しチップ: v6.1で課金機能を完全削除 */}
 
       {/* 来店記録ボタン（推し店のみ表示） */}
       {isOshi && (
@@ -1016,6 +1040,23 @@ export default function ShopDetailPage() {
             この店主を推す
           </button>
         </div>
+      )}
+
+      {/* QRチェックイン同時フロー */}
+      {showCheckinFlow && shop && (
+        <CheckinOshiFlow
+          shopId={shop.id}
+          shopName={shop.name}
+          shopSlug={shop.slug}
+          isAlreadyOshi={isOshi}
+          onClose={() => setShowCheckinFlow(false)}
+          onComplete={({ oshiRegistered }) => {
+            if (oshiRegistered) {
+              setIsOshi(true);
+              setOshiCount((c) => c + 1);
+            }
+          }}
+        />
       )}
     </div>
   );

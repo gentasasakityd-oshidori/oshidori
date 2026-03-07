@@ -578,6 +578,7 @@ export interface VisitRecord {
   visited_at: string;
   mood_tag: string | null;       // 後方互換（単一）
   mood_tags: string[] | null;    // 複数選択対応
+  emotion_tags: string[] | null; // 感情タグ（v6.1追加）
   memo: string | null;
   photo_url: string | null;
   is_public: boolean;
@@ -608,6 +609,7 @@ export interface FanLetterWithUser extends FanLetter {
   user_nickname: string | null;
   user_avatar_url: string | null;
   mood_tag: string | null;
+  emotion_tags: string[] | null; // 感情タグ（v6.1追加）
 }
 
 // UI用の複合型（ダミーデータ・クエリ結果共通）

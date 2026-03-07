@@ -58,7 +58,7 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const { shop_id, mood_tag, mood_tags, memo, photo_url, is_public, visited_at } = body;
+    const { shop_id, mood_tag, mood_tags, emotion_tags, memo, photo_url, is_public, visited_at } = body;
 
     if (!shop_id) {
       return NextResponse.json({ error: "shop_id is required" }, { status: 400 });
@@ -76,6 +76,11 @@ export async function POST(request: Request) {
     } else if (mood_tag) {
       insertData.mood_tag = mood_tag;
       insertData.mood_tags = [mood_tag]; // 単一→配列にも保存
+    }
+
+    // 感情タグ
+    if (Array.isArray(emotion_tags) && emotion_tags.length > 0) {
+      insertData.emotion_tags = emotion_tags;
     }
 
     if (memo && typeof memo === "string") insertData.memo = memo.slice(0, 500);

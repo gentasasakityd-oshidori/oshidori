@@ -6,8 +6,10 @@ import Image from "next/image";
 import { Camera, ChevronLeft, Upload, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { VISIT_MOOD_TAGS } from "@/lib/constants";
+import { VISIT_MOOD_TAGS, EMOTION_TAGS } from "@/lib/constants";
 import { toast } from "sonner";
+
+export const dynamic = "force-dynamic";
 
 interface OshiShop {
   id: string;
@@ -29,6 +31,7 @@ export default function NewDiaryEntryPage() {
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [selectedShop, setSelectedShop] = useState<OshiShop | null>(null);
   const [selectedMoods, setSelectedMoods] = useState<string[]>([]);
+  const [selectedEmotions, setSelectedEmotions] = useState<string[]>([]);
   const [memo, setMemo] = useState("");
   const [isPublic, setIsPublic] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -119,6 +122,7 @@ export default function NewDiaryEntryPage() {
         body: JSON.stringify({
           shop_id: selectedShop.shop_id,
           mood_tags: selectedMoods.length > 0 ? selectedMoods : undefined,
+          emotion_tags: selectedEmotions.length > 0 ? selectedEmotions : undefined,
           memo: memo.trim() || null,
           photo_url: photoUrl,
           is_public: isPublic,
@@ -365,6 +369,39 @@ export default function NewDiaryEntryPage() {
                   })}
                 </div>
               )}
+            </div>
+          </div>
+
+          {/* 感情タグ（任意） */}
+          <div>
+            <p className="text-sm font-medium text-[#2C3E50] mb-2">
+              どんな体験でしたか？ <span className="text-xs text-muted-foreground font-normal">(任意)</span>
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {EMOTION_TAGS.map((tag) => {
+                const isSelected = selectedEmotions.includes(tag.id);
+                return (
+                  <button
+                    key={tag.id}
+                    type="button"
+                    onClick={() =>
+                      setSelectedEmotions((prev) =>
+                        isSelected
+                          ? prev.filter((id) => id !== tag.id)
+                          : [...prev, tag.id]
+                      )
+                    }
+                    className={`inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+                      isSelected
+                        ? "bg-blue-500 text-white"
+                        : "bg-blue-50 text-blue-600 hover:bg-blue-100"
+                    }`}
+                  >
+                    <span>{tag.emoji}</span>
+                    <span>{tag.label}</span>
+                  </button>
+                );
+              })}
             </div>
           </div>
 

@@ -65,17 +65,31 @@ export async function GET() {
       }
     }
 
+    // Get location info for map view
+    const { data: basicInfoData } = await supabase
+      .from("shop_basic_info")
+      .select("shop_id, latitude, longitude")
+      .in("shop_id", shopIds);
+
+    const locationMap: Record<string, { latitude: number | null; longitude: number | null }> = {};
+    for (const info of (basicInfoData as { shop_id: string; latitude: number | null; longitude: number | null }[] | null) ?? []) {
+      locationMap[info.shop_id] = { latitude: info.latitude, longitude: info.longitude };
+    }
+
     // Build response
     const result = (shops as Shop[] | null)?.map((shop) => {
       const shopStories = (stories as Story[] | null)?.filter(
         (s) => s.shop_id === shop.id
       ) ?? [];
+      const location = locationMap[shop.id];
       return {
         ...shop,
         stories: shopStories,
         _count: {
           empathy: empathyCounts[shop.id] ?? 0,
         },
+        latitude: location?.latitude ?? null,
+        longitude: location?.longitude ?? null,
       };
     }) ?? [];
 

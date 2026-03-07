@@ -36,20 +36,36 @@ const THEME_COLLECTIONS = [
 ] as const;
 
 
-/** テーマ別 予報理由テンプレート */
-const FORECAST_REASON_TEMPLATES: Record<string, string> = {
-  origin: "創業の想いが熱い",
-  food_craft: "食へのこだわりが光る",
-  community: "地域に愛されている",
-  hospitality: "おもてなしの心",
-  personality: "店主の人柄が魅力",
-  local_connection: "地元密着の味",
-  vision: "未来を見据えた挑戦",
+/** 季節キーワードマッピング（月 → 旬の食材・季節ワード） */
+const SEASONAL_KEYWORDS: Record<number, { label: string; emoji: string; keywords: string[] }> = {
+  1: { label: "冬の味覚", emoji: "❄️", keywords: ["牡蠣", "白子", "ふぐ", "河豚", "蟹", "カニ", "大根", "鍋", "粕汁", "おでん", "みかん", "金柑", "冬"] },
+  2: { label: "早春の息吹", emoji: "🌱", keywords: ["菜の花", "ふきのとう", "春菊", "蕗", "いちご", "苺", "節分", "バレンタイン", "冬", "早春"] },
+  3: { label: "春の訪れ", emoji: "🌸", keywords: ["桜", "さくら", "春キャベツ", "たけのこ", "筍", "菜の花", "ホタルイカ", "しらす", "新玉ねぎ", "春", "ひな祭り"] },
+  4: { label: "春爛漫", emoji: "🌷", keywords: ["たけのこ", "筍", "山菜", "新茶", "桜えび", "しらす", "アスパラ", "春", "花見"] },
+  5: { label: "初夏の恵み", emoji: "🍃", keywords: ["新茶", "そら豆", "枝豆", "鰹", "カツオ", "初鰹", "トマト", "新じゃが", "初夏"] },
+  6: { label: "梅雨の楽しみ", emoji: "☔", keywords: ["梅", "鮎", "アユ", "枝豆", "とうもろこし", "トマト", "茄子", "ナス", "紫陽花", "梅雨", "夏"] },
+  7: { label: "夏の旬", emoji: "🍉", keywords: ["鰻", "うなぎ", "枝豆", "トマト", "茄子", "ナス", "冷やし", "かき氷", "スイカ", "夏", "七夕"] },
+  8: { label: "真夏の味覚", emoji: "☀️", keywords: ["鰻", "うなぎ", "桃", "とうもろこし", "冷やし", "そうめん", "ゴーヤ", "夏野菜", "夏"] },
+  9: { label: "秋の入り口", emoji: "🍂", keywords: ["秋刀魚", "さんま", "松茸", "栗", "新米", "梨", "ぶどう", "秋", "お月見"] },
+  10: { label: "秋の実り", emoji: "🍁", keywords: ["松茸", "栗", "さつまいも", "秋鮭", "柿", "きのこ", "銀杏", "秋", "紅葉"] },
+  11: { label: "晩秋の味わい", emoji: "🍂", keywords: ["牡蠣", "蟹", "カニ", "りんご", "かぼちゃ", "南瓜", "新蕎麦", "柚子", "ゆず", "秋", "冬"] },
+  12: { label: "冬のごちそう", emoji: "🎄", keywords: ["牡蠣", "白子", "ふぐ", "河豚", "蟹", "カニ", "鍋", "おでん", "年越し", "クリスマス", "冬"] },
 };
 
-/** テーマキーから予報理由テキストを取得 */
+/** テーマ別 相性理由テンプレート — 「あなたに合う理由」として表示 */
+const COMPATIBILITY_REASON_TEMPLATES: Record<string, string> = {
+  origin: "想いのこもったストーリー",
+  food_craft: "食へのこだわりが魅力",
+  community: "地域との深いつながり",
+  hospitality: "温かいおもてなし",
+  personality: "店主の人柄が素敵",
+  local_connection: "地元に根ざした味わい",
+  vision: "挑戦するこだわり",
+};
+
+/** テーマキーから相性理由テキストを取得 */
 function getForecastReasonText(themeKey: string): string {
-  return FORECAST_REASON_TEMPLATES[themeKey] ?? "こだわりのお店";
+  return COMPATIBILITY_REASON_TEMPLATES[themeKey] ?? "こだわりのお店";
 }
 
 /** story_themesから最高スコアのテーマキーとスコアを取得
@@ -209,6 +225,18 @@ export default async function HomePage() {
       // パーソナルレコメンド取得失敗時は空配列のまま
     }
   }
+
+  // 旬のおすすめ: 季節キーワードでフィルタ
+  const currentMonth = new Date().getMonth() + 1; // 1-12
+  const seasonalInfo = SEASONAL_KEYWORDS[currentMonth] ?? SEASONAL_KEYWORDS[1];
+  const seasonalShops = shopsWithStories.filter((shop) => {
+    const storyBody = shop.stories[0]?.body ?? "";
+    const menuTexts = shop.menus
+      .map((m) => `${m.kodawari_text ?? ""} ${m.owner_message ?? ""} ${m.name ?? ""}`)
+      .join(" ");
+    const searchText = `${storyBody} ${menuTexts}`;
+    return seasonalInfo.keywords.some((kw) => searchText.includes(kw));
+  }).slice(0, 6);
 
   // 推し店の新着更新を取得（ログイン済みユーザーのみ）
   // TODO: getOshiShopsUpdates関数を実装する
@@ -441,12 +469,55 @@ export default async function HomePage() {
         </section>
       )}
 
+      {/* 旬のおすすめ */}
+      {seasonalShops.length > 0 && (
+        <section className="px-4 py-5">
+          <div className="mx-auto max-w-4xl">
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <h2 className="text-lg font-bold flex items-center gap-1.5">
+                  {seasonalInfo.emoji} {seasonalInfo.label}
+                </h2>
+                <p className="text-[11px] text-muted-foreground mt-0.5">
+                  今の季節にぴったりのこだわり店
+                </p>
+              </div>
+              <Link
+                href="/explore"
+                className="text-sm text-primary hover:underline shrink-0"
+              >
+                もっと見る
+              </Link>
+            </div>
+            <div className="flex gap-3 overflow-x-auto snap-x snap-mandatory pb-2 scrollbar-none -mx-1 px-1 pr-8">
+              {seasonalShops.map((shop) => (
+                <div key={shop.id} className="snap-start shrink-0 w-[44vw] max-w-[200px] min-w-[170px]">
+                  <SmallCard
+                    shopSlug={shop.slug}
+                    shopName={shop.name}
+                    area={shop.area}
+                    imageUrl={shop.image_url}
+                    catchcopy={
+                      shop.stories[0]?.catchcopy_primary ??
+                      shop.stories[0]?.title ??
+                      null
+                    }
+                    displayTags={getDisplayTags(shop)}
+                    budgetLabel={shop.basic_info?.budget_label_dinner ?? shop.basic_info?.budget_label_lunch ?? null}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
+
       {/* Section 2: オシドリ予報 */}
       <section className="px-4 py-6">
         <div className="mx-auto max-w-4xl">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-bold flex items-center gap-1.5">
-              ☀️ オシドリ予報
+              ☀️ あなたとの相性予報
             </h2>
             {shopsWithStories.length > 0 && (
               <Link
@@ -464,8 +535,8 @@ export default async function HomePage() {
               <div className="mt-1 flex items-center justify-between">
                 <p className="text-[11px] text-muted-foreground">
                   {hasEmpathyData
-                    ? "あなたの共感傾向にマッチしそうなお店"
-                    : "まずはこのお店から — 共感するほど予報の精度UP"}
+                    ? "あなたの好みに合いそうなお店をピックアップ"
+                    : "ストーリーに共感するほど、相性予報の精度がアップ"}
                 </p>
                 <span className="text-[10px] text-primary/60 flex items-center gap-0.5 animate-pulse">
                   スワイプ →
@@ -508,13 +579,13 @@ export default async function HomePage() {
               {(!isLoggedIn || !hasEmpathyData) && (
                 <div className="mt-3 rounded-lg bg-gradient-to-r from-orange-50 to-amber-50 border border-orange-100 px-3.5 py-3">
                   <div className="flex items-center gap-2.5">
-                    <span className="text-lg">☀️</span>
+                    <span className="text-lg">💫</span>
                     <div className="min-w-0 flex-1">
                       <p className="text-[12px] font-bold text-[#2C3E50]">
-                        あなた専用の予報を作ろう
+                        あなただけの相性予報を作ろう
                       </p>
                       <p className="text-[10px] text-[#5D6D7E] mt-0.5">
-                        ストーリーに共感するほど、ぴったりのお店を見つけてくれます
+                        ストーリーに共感するほど、相性の合うお店が見つかります
                       </p>
                     </div>
                     <div className="flex items-center gap-1 text-[9px] text-orange-500 shrink-0">

@@ -145,6 +145,7 @@ export default function DashboardPage() {
   const [error, setError] = useState<string | null>(null);
   const [cmProposals, setCmProposals] = useState<CMProposalData[]>([]);
   const [cmPendingCount, setCmPendingCount] = useState(0);
+  const [recentLetters, setRecentLetters] = useState<{ id: string; nickname: string; body: string; created_at: string }[]>([]);
 
   // CM提案のアクション処理
   const handleProposalAction = async (proposalId: string, action: "accept" | "dismiss") => {
@@ -187,6 +188,24 @@ export default function DashboardPage() {
             }
           } catch {
             // CM提案の取得失敗は無視
+          }
+
+          // 最新ファンレター取得
+          try {
+            const letterRes = await fetch("/api/fan-letters?limit=3");
+            if (letterRes.ok) {
+              const letterData = await letterRes.json();
+              setRecentLetters(
+                (letterData.letters ?? []).slice(0, 3).map((l: { id: string; user_nickname?: string; body: string; created_at: string }) => ({
+                  id: l.id,
+                  nickname: l.user_nickname ?? "匿名さん",
+                  body: l.body,
+                  created_at: l.created_at,
+                }))
+              );
+            }
+          } catch {
+            // ignore
           }
         }
       } catch {
@@ -398,6 +417,78 @@ export default function DashboardPage() {
         </Card>
       )}
 
+      {/* AI CM提案ウィジェット — ファーストビューに配置 */}
+      {cmProposals.length > 0 && (
+        <Card className="border-purple-200/60 bg-gradient-to-r from-purple-50/40 to-violet-50/30">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Bot className="h-4 w-4 text-purple-600" />
+                <h2 className="text-sm font-semibold text-purple-900">🤖 AIからの提案</h2>
+                {cmPendingCount > 0 && (
+                  <Badge variant="secondary" className="text-[10px] bg-purple-100 text-purple-700">
+                    {cmPendingCount}件
+                  </Badge>
+                )}
+              </div>
+              <Link
+                href="/dashboard/ai"
+                className="text-xs text-purple-600 hover:underline"
+              >
+                すべて見る
+              </Link>
+            </div>
+            <div className="space-y-2">
+              {cmProposals.slice(0, 3).map((proposal) => (
+                <div
+                  key={proposal.id}
+                  className="rounded-lg border border-white/80 bg-white/60 p-3"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5">
+                        {proposal.priority === "high" && (
+                          <Badge variant="secondary" className="text-[10px] bg-red-100 text-red-700">
+                            優先
+                          </Badge>
+                        )}
+                        <p className="text-sm font-medium">{proposal.title}</p>
+                      </div>
+                      <p className="mt-1 text-xs text-muted-foreground line-clamp-2">
+                        {proposal.description}
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 gap-1">
+                      <button
+                        onClick={() => handleProposalAction(proposal.id, "accept")}
+                        className="flex h-7 w-7 items-center justify-center rounded-full bg-green-100 text-green-700 transition-colors hover:bg-green-200"
+                        title="採用する"
+                      >
+                        <Check className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        onClick={() => handleProposalAction(proposal.id, "dismiss")}
+                        className="flex h-7 w-7 items-center justify-center rounded-full bg-gray-100 text-gray-500 transition-colors hover:bg-gray-200"
+                        title="却下する"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                  {proposal.suggested_message && (
+                    <div className="mt-2 rounded bg-purple-50/50 p-2">
+                      <p className="text-xs text-purple-800 line-clamp-2">
+                        &quot;{proposal.suggested_message}&quot;
+                      </p>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* KPIカード */}
       <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
         <KpiCard
@@ -470,72 +561,6 @@ export default function DashboardPage() {
         );
       })()}
 
-      {/* AI CM提案ウィジェット */}
-      {cmProposals.length > 0 && (
-        <Card className="border-purple-200/60 bg-gradient-to-r from-purple-50/40 to-violet-50/30">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <Bot className="h-4 w-4 text-purple-600" />
-                <h2 className="text-sm font-semibold text-purple-900">AIからの提案</h2>
-                {cmPendingCount > 0 && (
-                  <Badge variant="secondary" className="text-[10px] bg-purple-100 text-purple-700">
-                    {cmPendingCount}件
-                  </Badge>
-                )}
-              </div>
-            </div>
-            <div className="space-y-2">
-              {cmProposals.slice(0, 3).map((proposal) => (
-                <div
-                  key={proposal.id}
-                  className="rounded-lg border border-white/80 bg-white/60 p-3"
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-1.5">
-                        {proposal.priority === "high" && (
-                          <Badge variant="secondary" className="text-[10px] bg-red-100 text-red-700">
-                            優先
-                          </Badge>
-                        )}
-                        <p className="text-sm font-medium">{proposal.title}</p>
-                      </div>
-                      <p className="mt-1 text-xs text-muted-foreground line-clamp-2">
-                        {proposal.description}
-                      </p>
-                    </div>
-                    <div className="flex shrink-0 gap-1">
-                      <button
-                        onClick={() => handleProposalAction(proposal.id, "accept")}
-                        className="flex h-7 w-7 items-center justify-center rounded-full bg-green-100 text-green-700 transition-colors hover:bg-green-200"
-                        title="採用する"
-                      >
-                        <Check className="h-3.5 w-3.5" />
-                      </button>
-                      <button
-                        onClick={() => handleProposalAction(proposal.id, "dismiss")}
-                        className="flex h-7 w-7 items-center justify-center rounded-full bg-gray-100 text-gray-500 transition-colors hover:bg-gray-200"
-                        title="却下する"
-                      >
-                        <X className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  </div>
-                  {proposal.suggested_message && (
-                    <div className="mt-2 rounded bg-purple-50/50 p-2">
-                      <p className="text-xs text-purple-800 line-clamp-2">
-                        &quot;{proposal.suggested_message}&quot;
-                      </p>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
       {/* おすすめアクション */}
       {!hasIncompleteTasks && (
         <Card className="border-primary/20 bg-gradient-to-r from-orange-50/50 to-amber-50/30">
@@ -585,6 +610,56 @@ export default function DashboardPage() {
                   <p className="text-xs text-muted-foreground">ストーリーをSNSで広めましょう</p>
                 </div>
               </Link>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* 📬 最新ファンレター */}
+      {recentLetters.length > 0 && (
+        <Card className="border-amber-200/60 bg-gradient-to-r from-amber-50/40 to-yellow-50/30">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Mail className="h-4 w-4 text-amber-600" />
+                <h2 className="text-sm font-semibold text-amber-900">📬 最新ファンレター</h2>
+                {kpi.unread_letter_count > 0 && (
+                  <Badge variant="secondary" className="text-[10px] bg-red-100 text-red-700">
+                    {kpi.unread_letter_count}件未読
+                  </Badge>
+                )}
+              </div>
+              <Link
+                href="/dashboard/fan-letters"
+                className="text-xs text-amber-600 hover:underline"
+              >
+                すべて見る
+              </Link>
+            </div>
+            <div className="space-y-2">
+              {recentLetters.map((letter) => (
+                <div
+                  key={letter.id}
+                  className="rounded-lg border border-white/80 bg-white/60 p-3"
+                >
+                  <div className="flex items-start gap-3">
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-amber-100 text-sm">
+                      💌
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm">
+                        <strong>{letter.nickname}</strong>さん
+                      </p>
+                      <p className="mt-0.5 text-xs text-muted-foreground line-clamp-2">
+                        {letter.body}
+                      </p>
+                    </div>
+                    <span className="shrink-0 text-[11px] text-muted-foreground">
+                      {new Date(letter.created_at).toLocaleDateString("ja-JP", { month: "short", day: "numeric" })}
+                    </span>
+                  </div>
+                </div>
+              ))}
             </div>
           </CardContent>
         </Card>
