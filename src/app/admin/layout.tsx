@@ -19,6 +19,8 @@ import {
   Mic,
   Heart,
   ScrollText,
+  ListChecks,
+  ClipboardList,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/client";
@@ -28,6 +30,8 @@ const NAV_ITEMS = [
   { href: "/admin/shops", label: "店舗管理", icon: Store },
   { href: "/admin/users", label: "ユーザー管理", icon: Users },
   { href: "/admin/applications", label: "店舗権限申請", icon: FileText },
+  { href: "/admin/onboarding", label: "オンボーディング", icon: ListChecks },
+  { href: "/admin/interviewer", label: "インタビュー管理", icon: ClipboardList },
   { href: "/admin/stories", label: "ストーリー管理", icon: BookOpen },
   { href: "/admin/interviews", label: "AI品質管理", icon: Sparkles },
   { href: "/admin/ai-costs", label: "APIコスト", icon: DollarSign },

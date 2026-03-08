@@ -132,3 +132,126 @@ export interface AIProvider {
     stream?: boolean;
   }): Promise<ReadableStream | string>;
 }
+
+// ── ピボット対応: 新規型定義 ──
+
+/** インタビューモード */
+export type InterviewMode = "ai_self" | "hybrid" | "human_only";
+
+/** 事前調査レポート */
+export interface PreResearchReport {
+  shopSummary: {
+    name: string;
+    category: string;
+    area: string;
+    priceRange: string;
+    yearsInBusiness?: string;
+    snsPresence?: {
+      instagramFollowers: number;
+      postingFrequency: string;
+      contentStyle: string;
+    };
+  };
+  personalityHypothesis: Array<{
+    trait: string;
+    evidence: string;
+    confidence: "high" | "medium" | "low";
+    source: string;
+  }>;
+  kodawariHypothesis: Array<{
+    axis: string;
+    evidence: string;
+    confidence: "high" | "medium" | "low";
+    source: string;
+  }>;
+  episodeHypothesis: Array<{
+    topic: string;
+    evidence: string;
+    questions: string[];
+    priority: "high" | "medium" | "low";
+  }>;
+  customerVoiceSummary?: {
+    positiveThemes: string[];
+    uniqueMentions: string[];
+    emotionalKeywords: string[];
+  };
+  menuHighlights?: Array<{
+    name: string;
+    mentions: string;
+    sentiment: string;
+  }>;
+  interviewAngles: string[];
+}
+
+/** インタビュー設計書 */
+export interface InterviewDesignDoc {
+  interviewStrategy: string;
+  focusAreas: string[];
+  estimatedDurationMinutes: number;
+  questions: Array<{
+    order: number;
+    phase: string;
+    question: string;
+    intent: string;
+    followUpHints: string[];
+    priority: "must_ask" | "nice_to_have" | "skip_if_short";
+    basedOn?: string;
+  }>;
+  interviewerTips: {
+    openingScript: string;
+    closingScript: string;
+    silenceHandling: string;
+    moodTips: string;
+    recordingNotes: string;
+  };
+}
+
+/** コンテンツ生成出力 */
+export interface GeneratedContentOutput {
+  contentType: "sns_post" | "story_update" | "community_message";
+  contentBody: string;
+  hashtags?: string[];
+  toneMatchScore: number;
+  suggestedPostingTime?: string;
+  altVersions?: Array<{
+    label: string;
+    contentBody: string;
+  }>;
+}
+
+/** マイクロ入力 */
+export interface MicroInput {
+  inputType: "voice_memo" | "text_memo" | "photo" | "customer_voice" | "sns_post" | "seasonal_event";
+  content?: string;
+  audioUrl?: string;
+  photoUrl?: string;
+  transcription?: string;
+  metadata?: Record<string, unknown>;
+}
+
+/** ハイブリッドストーリー生成出力 */
+export interface HybridStoryOutput extends StoryOutput {
+  qualityIndicators: {
+    transcriptCoverage: number;
+    uniqueQuotesCount: number;
+    emotionalDepthScore: number;
+    factualAccuracyNotes: string;
+  };
+}
+
+/** プロンプトバージョン */
+export interface PromptVersion {
+  id: string;
+  name: string;
+  version: string;
+  promptType: string;
+  content: string;
+  deployedAt: string;
+  deprecatedAt: string | null;
+  performanceMetrics: {
+    avgQualityScore?: number;
+    approvalRate?: number;
+    empathyRate?: number;
+    checkinLift?: number;
+  };
+}

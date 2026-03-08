@@ -33,6 +33,8 @@ export interface Database {
           tabelog_url: string | null;
           gmb_url: string | null;
           website_url: string | null;
+          owner_id: string | null;
+          onboarding_phase: string;
           created_at: string;
           updated_at: string;
         };
@@ -59,6 +61,8 @@ export interface Database {
           tabelog_url?: string | null;
           gmb_url?: string | null;
           website_url?: string | null;
+          owner_id?: string | null;
+          onboarding_phase?: string;
           created_at?: string;
           updated_at?: string;
         };
@@ -85,6 +89,8 @@ export interface Database {
           tabelog_url?: string | null;
           gmb_url?: string | null;
           website_url?: string | null;
+          owner_id?: string | null;
+          onboarding_phase?: string;
           created_at?: string;
           updated_at?: string;
         };
@@ -558,6 +564,130 @@ export type FanClubPlan = Database["public"]["Tables"]["fan_club_plans"]["Row"];
 export type TagCategory = "kodawari" | "personality" | "scene" | "genre" | "budget";
 export type TagSource = "ai_interview" | "fan_emotion" | "manual";
 export type MessageTarget = "all_fans" | "specific_fans";
+
+// ── ピボット対応: 新規テーブル型 ──
+
+/** プロンプトバージョン管理 */
+export interface PromptVersionRow {
+  id: string;
+  name: string;
+  version: string;
+  prompt_type: string;
+  content: string;
+  deployed_at: string;
+  deprecated_at: string | null;
+  performance_metrics: Json;
+  created_at: string;
+}
+
+/** 生成コンテンツ（評価パイプライン） */
+export interface GeneratedContentRow {
+  id: string;
+  shop_id: string;
+  content_type: string;
+  content_body: string;
+  prompt_version_id: string | null;
+  situation_context: Json;
+  approval_status: "pending" | "approved" | "edited" | "skipped";
+  approved_at: string | null;
+  edited_body: string | null;
+  sns_engagement: Json;
+  checkin_lift_7d: number;
+  oshi_registration_lift_7d: number;
+  created_at: string;
+}
+
+/** 事前調査レポート */
+export interface PreResearchReportRow {
+  id: string;
+  shop_id: string;
+  instagram_data: Json;
+  google_maps_data: Json;
+  tabelog_data: Json;
+  web_data: Json;
+  personality_hypothesis: Json;
+  kodawari_hypothesis: Json;
+  episode_hypothesis: Json;
+  research_status: "pending" | "in_progress" | "completed" | "failed";
+  sources_checked: string[];
+  created_at: string;
+  completed_at: string | null;
+}
+
+/** インタビュー設計書 */
+export interface InterviewDesignDocRow {
+  id: string;
+  shop_id: string;
+  pre_research_id: string | null;
+  questions: Json;
+  interview_strategy: string | null;
+  focus_areas: string[];
+  estimated_duration_minutes: number;
+  prompt_version_id: string | null;
+  status: "draft" | "finalized" | "used" | "archived";
+  used_at: string | null;
+  interviewer_notes: string | null;
+  created_at: string;
+}
+
+/** マイクロ入力 */
+export interface MicroInputRow {
+  id: string;
+  shop_id: string;
+  input_type: string;
+  content: string | null;
+  audio_url: string | null;
+  photo_url: string | null;
+  transcription: string | null;
+  metadata: Json;
+  processed: boolean;
+  created_at: string;
+}
+
+/** インタビュアー */
+export interface InterviewerRow {
+  id: string;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  total_interviews: number;
+  avg_story_quality_score: number;
+  specialties: string[];
+  is_active: boolean;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** インタビュアー割当 */
+export interface InterviewerAssignmentRow {
+  id: string;
+  interviewer_id: string;
+  shop_id: string;
+  status: "assigned" | "in_progress" | "completed" | "cancelled";
+  assigned_at: string;
+  scheduled_date: string | null;
+  scheduled_time: string | null;
+  notes: string | null;
+  completed_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** AI CM アクションログ */
+export interface AiCmActionLogRow {
+  id: string;
+  shop_id: string;
+  action_type: string;
+  action_detail: Json;
+  result_type: string | null;
+  result_value: number | null;
+  result_detail: Json;
+  day_of_week: number | null;
+  hour_of_day: number | null;
+  owner_profile_snapshot: Json;
+  created_at: string;
+}
 
 // display_tagsテーブルの行型
 export interface DisplayTagRow {

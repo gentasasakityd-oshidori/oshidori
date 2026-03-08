@@ -20,7 +20,7 @@ export async function GET() {
     // owner_id でユーザーの店舗を検索
     const { data: shop } = await supabase
       .from("shops")
-      .select("id, name, owner_name")
+      .select("id, name, owner_name, onboarding_phase")
       .eq("owner_id", user.id)
       .limit(1)
       .single();
@@ -268,7 +268,11 @@ export async function GET() {
     };
 
     return NextResponse.json({
-      shop: { name: (shop as { name: string; owner_name: string }).name, owner_name: (shop as { name: string; owner_name: string }).owner_name },
+      shop: {
+        name: (shop as { name: string; owner_name: string; onboarding_phase: string }).name,
+        owner_name: (shop as { name: string; owner_name: string; onboarding_phase: string }).owner_name,
+        onboarding_phase: (shop as { name: string; owner_name: string; onboarding_phase: string }).onboarding_phase,
+      },
       kpi: {
         oshi_count: oshiCount,
         empathy_count: empathyCount,

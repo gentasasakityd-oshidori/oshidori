@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { getMyShopId, verifyShopOwnership } from "@/lib/queries/my-shop";
+import { markStoryReviewed } from "@/lib/onboarding-pipeline";
 
 /** GET: 自店舗のストーリー一覧 */
 export async function GET() {
@@ -112,6 +113,13 @@ export async function PATCH(request: NextRequest) {
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 400 });
+    }
+
+    // ストーリー公開時: オンボーディングフェーズを更新（写真準備待ちへ）
+    if (updates.status === "published") {
+      markStoryReviewed(supabase, (story as { shop_id: string }).shop_id).catch((err) => {
+        console.error("[Pipeline] Story reviewed phase update error:", err);
+      });
     }
 
     return NextResponse.json({ story: data });

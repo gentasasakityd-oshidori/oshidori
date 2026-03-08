@@ -101,7 +101,13 @@ const PHASE_ORDER: InterviewPhase[] = [
   "future",
 ];
 
-const DEMO_SHOP_ID_KEY = "oshidori_demo_shop_id";
+/** @deprecated 旧キー。移行のためクリア用に残す */
+const LEGACY_SHOP_ID_KEY = "oshidori_demo_shop_id";
+
+/** ユーザーごとの店舗IDキャッシュキーを生成 */
+function shopIdCacheKey(userId: string) {
+  return `oshidori_shop_id_${userId}`;
+}
 
 // Web Speech API の型宣言（ブラウザ組込み）
 type SpeechRecognitionType = typeof window extends { SpeechRecognition: infer T } ? T : never;
@@ -219,10 +225,14 @@ export default function InterviewPage() {
   useEffect(() => {
     async function checkInitialInterview() {
       try {
-        const shopId = localStorage.getItem(DEMO_SHOP_ID_KEY);
-        if (!shopId) return;
         const { createClient } = await import("@/lib/supabase/client");
         const supabase = createClient();
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+        // 旧キャッシュクリア
+        localStorage.removeItem(LEGACY_SHOP_ID_KEY);
+        const shopId = localStorage.getItem(shopIdCacheKey(user.id));
+        if (!shopId) return;
         const { data } = await supabase
           .from("ai_interviews")
           .select("id")
@@ -308,27 +318,35 @@ export default function InterviewPage() {
 
   // ─── ショップID取得（owner_idベース、adminは全店舗アクセス可） ───
   const getShopId = useCallback(async (forceRefresh = false): Promise<string | null> => {
+    const { createClient } = await import("@/lib/supabase/client");
+    const supabase = createClient();
+
+    // 現在のユーザーIDを取得
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return null;
+
+    // 旧キャッシュをクリア（移行処理）
+    localStorage.removeItem(LEGACY_SHOP_ID_KEY);
+
+    const cacheKey = shopIdCacheKey(user.id);
+
     if (!forceRefresh) {
-      const cached = localStorage.getItem(DEMO_SHOP_ID_KEY);
+      const cached = localStorage.getItem(cacheKey);
       if (cached) return cached;
     }
-    try {
-      const { createClient } = await import("@/lib/supabase/client");
-      const supabase = createClient();
-      // 現在のユーザーIDを取得
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return null;
 
-      // まず owner_id でユーザーの店舗を検索
+    try {
+      // まず owner_id でユーザー自身の店舗を検索（最新作成順）
       const { data } = await supabase
         .from("shops")
         .select("id")
         .eq("owner_id", user.id)
+        .order("created_at", { ascending: false })
         .limit(1)
-        .single();
+        .maybeSingle();
       if (data) {
         const shopData = data as { id: string };
-        localStorage.setItem(DEMO_SHOP_ID_KEY, shopData.id);
+        localStorage.setItem(cacheKey, shopData.id);
         return shopData.id;
       }
 
@@ -343,18 +361,19 @@ export default function InterviewPage() {
         const { data: anyShop } = await supabase
           .from("shops")
           .select("id")
+          .order("created_at", { ascending: false })
           .limit(1)
-          .single();
+          .maybeSingle();
         if (anyShop) {
           const shopData = anyShop as { id: string };
-          localStorage.setItem(DEMO_SHOP_ID_KEY, shopData.id);
+          localStorage.setItem(cacheKey, shopData.id);
           return shopData.id;
         }
       }
     } catch {
       // フォールバック
     }
-    localStorage.removeItem(DEMO_SHOP_ID_KEY);
+    localStorage.removeItem(cacheKey);
     return null;
   }, []);
 
@@ -386,7 +405,7 @@ export default function InterviewPage() {
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
         if (errData.error === "Shop not found") {
-          localStorage.removeItem(DEMO_SHOP_ID_KEY);
+          // キャッシュ無効 → 強制リフレッシュ
           shopId = await getShopId(true);
           if (!shopId) throw new Error("店舗データが見つかりません");
           res = await fetch("/api/interview/start", {
@@ -971,7 +990,7 @@ export default function InterviewPage() {
 
     const handleFeedbackSubmit = async () => {
       if (!interviewId) return;
-      const shopId = localStorage.getItem(DEMO_SHOP_ID_KEY);
+      const shopId = await getShopId();
       if (!shopId) return;
       try {
         await fetch("/api/interview/feedback", {

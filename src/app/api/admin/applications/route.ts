@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { triggerPostApprovalPipeline } from "@/lib/onboarding-pipeline";
 
 async function verifyAdmin(supabase: Awaited<ReturnType<typeof createServerSupabaseClient>>) {
   const {
@@ -145,7 +146,7 @@ export async function PATCH(request: Request) {
         .maybeSingle();
       const finalSlug = existingSlug ? `${slug}-${Date.now()}` : slug;
 
-      await db.from("shops").insert({
+      const { data: newShop } = await db.from("shops").insert({
         slug: finalSlug,
         name: app.shop_name,
         owner_name: app.applicant_name,
@@ -153,7 +154,17 @@ export async function PATCH(request: Request) {
         area: app.shop_area || "shibuya",
         category: app.shop_genre || "japanese",
         is_published: false,
-      });
+        onboarding_phase: "approved",
+      }).select("id").single();
+
+      // 承認後パイプラインを fire-and-forget で実行
+      // 事前調査 → インタビュー設計書生成 を自動チェーン
+      if (newShop) {
+        const shopId = (newShop as { id: string }).id;
+        triggerPostApprovalPipeline(supabase, shopId).catch((err) => {
+          console.error("[Pipeline] Background pipeline error:", err);
+        });
+      }
     }
 
     return NextResponse.json({ success: true });

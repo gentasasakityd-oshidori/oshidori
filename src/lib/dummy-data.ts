@@ -23,6 +23,8 @@ import type { ShopWithRelations } from "@/types/database";
 export const DUMMY_SHOPS: ShopWithRelations[] = [
   {
     id: "shop-1",
+    owner_id: null,
+    onboarding_phase: "published",
     created_at: "2026-03-01T00:00:00Z",
     updated_at: "2026-03-01T00:00:00Z",
     name: "蔵前 手打ちそば やまと",
@@ -104,6 +106,8 @@ export const DUMMY_SHOPS: ShopWithRelations[] = [
   },
   {
     id: "shop-2",
+    owner_id: null,
+    onboarding_phase: "published",
     created_at: "2026-03-01T00:00:00Z",
     updated_at: "2026-03-01T00:00:00Z",
     name: "清澄白河 ビストロ Lien",
@@ -169,6 +173,8 @@ export const DUMMY_SHOPS: ShopWithRelations[] = [
   },
   {
     id: "shop-3",
+    owner_id: null,
+    onboarding_phase: "published",
     created_at: "2026-03-01T00:00:00Z",
     updated_at: "2026-03-01T00:00:00Z",
     name: "代々木上原 炭火焼鳥 とり信",
@@ -250,6 +256,8 @@ export const DUMMY_SHOPS: ShopWithRelations[] = [
   },
   {
     id: "shop-4",
+    owner_id: null,
+    onboarding_phase: "published",
     created_at: "2026-03-01T00:00:00Z",
     updated_at: "2026-03-01T00:00:00Z",
     name: "三軒茶屋 スパイスカレー MANTRA",
@@ -315,6 +323,8 @@ export const DUMMY_SHOPS: ShopWithRelations[] = [
   },
   {
     id: "shop-5",
+    owner_id: null,
+    onboarding_phase: "published",
     created_at: "2026-03-01T00:00:00Z",
     updated_at: "2026-03-01T00:00:00Z",
     name: "神楽坂 日本料理 つきしろ",
@@ -381,6 +391,8 @@ export const DUMMY_SHOPS: ShopWithRelations[] = [
   },
   {
     id: "shop-6",
+    owner_id: null,
+    onboarding_phase: "published",
     created_at: "2026-03-01T00:00:00Z",
     updated_at: "2026-03-01T00:00:00Z",
     name: "蔵前 ベーカリー KOKU",

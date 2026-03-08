@@ -18,6 +18,7 @@ import {
   generateInterviewCompletionProposals,
   saveProposals,
 } from "@/lib/ai/cm-proposals";
+import { triggerPostInterviewPipeline, markStoryGenerated } from "@/lib/onboarding-pipeline";
 
 export async function POST(request: Request) {
   try {
@@ -198,6 +199,11 @@ async function completeFullInterview(
   transcript: string,
   interview_id: string,
 ) {
+  // オンボーディングフェーズ: ストーリー生成中に更新
+  triggerPostInterviewPipeline(supabase, interviewData.shop_id).catch((err) => {
+    console.error("[Pipeline] Post-interview phase update error:", err);
+  });
+
   // 食べてほしい一品パートのメッセージを抽出
   const menuMessages = allMessages
     .filter((m) => m.phase === 4)
@@ -512,6 +518,13 @@ async function completeFullInterview(
     await saveProposals(supabase, interviewData.shop_id, proposals);
   } catch (cmError) {
     console.error("Failed to generate CM proposals:", cmError);
+  }
+
+  // オンボーディングフェーズ: ストーリー生成完了 → レビュー待ちへ
+  if (savedStory) {
+    markStoryGenerated(supabase, interviewData.shop_id).catch((err) => {
+      console.error("[Pipeline] Story generated phase update error:", err);
+    });
   }
 
   return NextResponse.json({

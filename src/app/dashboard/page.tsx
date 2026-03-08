@@ -30,6 +30,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EMPATHY_TAGS } from "@/lib/constants";
+import { getOwnerStepInfo, OWNER_VISIBLE_STEPS } from "@/lib/onboarding";
 
 type WeeklyTrend = { thisWeek: number; lastWeek: number };
 
@@ -46,7 +47,7 @@ type CMProposalData = {
 };
 
 type DashboardData = {
-  shop: { name: string; owner_name: string; id?: string } | null;
+  shop: { name: string; owner_name: string; id?: string; onboarding_phase?: string } | null;
   kpi: {
     oshi_count: number;
     empathy_count: number;
@@ -133,6 +134,88 @@ function KpiCard({
         </div>
         <div className="mt-1.5">
           <TrendIndicator trend={trend} />
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function OnboardingStepperCard({ phase }: { phase: string }) {
+  const stepInfo = getOwnerStepInfo(phase);
+  if (!stepInfo) return null;
+
+  return (
+    <Card className="border-blue-200/60 bg-gradient-to-r from-blue-50/40 to-indigo-50/30">
+      <CardContent className="p-5">
+        <div className="flex items-center gap-2 mb-4">
+          <Sparkles className="h-4 w-4 text-blue-600" />
+          <h2 className="text-sm font-semibold text-blue-900">オンボーディング進捗</h2>
+          <Badge variant="secondary" className="text-[10px] bg-blue-100 text-blue-700">
+            ステップ {stepInfo.step} / {OWNER_VISIBLE_STEPS.length}
+          </Badge>
+        </div>
+
+        {/* ステッパー */}
+        <div className="relative">
+          {/* 接続線 */}
+          <div className="absolute left-0 right-0 top-4 hidden sm:block">
+            <div className="mx-8 h-0.5 bg-muted" />
+            <div
+              className="mx-8 -mt-0.5 h-0.5 bg-blue-500 transition-all"
+              style={{
+                width: `${((stepInfo.step - 1) / (OWNER_VISIBLE_STEPS.length - 1)) * 100}%`,
+              }}
+            />
+          </div>
+
+          {/* ステップ */}
+          <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
+            {OWNER_VISIBLE_STEPS.map((ownerStep) => {
+              const isCompleted = ownerStep.step < stepInfo.step;
+              const isCurrent = ownerStep.step === stepInfo.step;
+
+              return (
+                <div key={ownerStep.step} className="flex flex-col items-center text-center">
+                  <div
+                    className={`relative z-10 flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold transition-all ${
+                      isCompleted
+                        ? "bg-blue-500 text-white"
+                        : isCurrent
+                          ? "bg-blue-500 text-white ring-4 ring-blue-200"
+                          : "bg-muted text-muted-foreground"
+                    }`}
+                  >
+                    {isCompleted ? (
+                      <CheckCircle2 className="h-4 w-4" />
+                    ) : (
+                      ownerStep.step
+                    )}
+                  </div>
+                  <span
+                    className={`mt-1.5 text-[10px] leading-tight ${
+                      isCurrent
+                        ? "font-semibold text-blue-700"
+                        : isCompleted
+                          ? "text-blue-600"
+                          : "text-muted-foreground"
+                    }`}
+                  >
+                    {ownerStep.label}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* 現在のステップ説明 */}
+        <div className="mt-4 rounded-lg border border-blue-200/60 bg-white/60 p-3">
+          <p className="text-sm font-medium text-blue-900">
+            {stepInfo.label}
+          </p>
+          <p className="mt-0.5 text-xs text-blue-700/70">
+            {stepInfo.description}
+          </p>
         </div>
       </CardContent>
     </Card>
@@ -325,6 +408,11 @@ export default function DashboardPage() {
           </p>
         )}
       </div>
+
+      {/* オンボーディング進捗ステッパー */}
+      {shop.onboarding_phase && shop.onboarding_phase !== "published" && (
+        <OnboardingStepperCard phase={shop.onboarding_phase} />
+      )}
 
       {/* セットアップ タスクリスト */}
       {hasIncompleteTasks && (
