@@ -36,6 +36,7 @@ const ROUTE_GROUP_MAP: Record<string, string> = {
   "/dashboard/stories": "/dashboard/content",
   "/dashboard/menus": "/dashboard/content",
   "/dashboard/updates": "/dashboard/content",
+  "/dashboard/supply-flash": "/dashboard/content",
   "/dashboard/photos": "/dashboard/content",
   "/dashboard/sns-hub": "/dashboard/content",
   "/dashboard/fans": "/dashboard/interaction",

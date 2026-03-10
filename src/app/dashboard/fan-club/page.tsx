@@ -20,8 +20,9 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { FAN_CLUB_TEMPLATES, FAN_CLUB_BENEFIT_OPTIONS } from "@/lib/constants";
+import { FAN_CLUB_TEMPLATES, FAN_CLUB_BENEFIT_OPTIONS, POC_FREE_MODE } from "@/lib/constants";
 import type { FanClubTemplateKey } from "@/lib/constants";
+import { Users } from "lucide-react";
 import { toast } from "sonner";
 import Link from "next/link";
 
@@ -91,6 +92,7 @@ export default function FanClubPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [memberCount, setMemberCount] = useState(0);
 
   // UI状態
   const [view, setView] = useState<"templates" | "form" | "detail">("templates");
@@ -125,6 +127,16 @@ export default function FanClubPage() {
       if (data.plan) {
         setPlan(data.plan);
         setView("detail");
+        // メンバー数（推し登録数）を取得
+        if (data.memberCount != null) {
+          setMemberCount(data.memberCount);
+        } else {
+          // APIがmemberCountを返さない場合、別途取得
+          fetch("/api/dashboard/fan-club/members")
+            .then(r => r.ok ? r.json() : null)
+            .then(d => { if (d?.count != null) setMemberCount(d.count); })
+            .catch(() => {});
+        }
       } else {
         setView("templates");
       }
@@ -386,6 +398,22 @@ export default function FanClubPage() {
       {/* ──────────────────────────── */}
       {view === "templates" && (
         <>
+          {/* PoC無料モードバナー */}
+          {POC_FREE_MODE && (
+            <Card className="border-amber-300 bg-gradient-to-r from-amber-50 to-orange-50">
+              <CardContent className="flex items-start gap-3 p-4">
+                <span className="text-2xl">🎉</span>
+                <div>
+                  <p className="font-bold text-amber-800">プレオープン特別無料期間</p>
+                  <p className="mt-1 text-sm text-amber-700">
+                    現在PoC期間中のため、ファンクラブへの参加は無料です。
+                    推し登録してくれたお客さんが自動的にファンクラブメンバーになります。
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           {/* 導入セクション */}
           <Card className="border-primary/20 bg-warm">
             <CardContent className="flex items-start gap-3 p-4">
@@ -396,7 +424,9 @@ export default function FanClubPage() {
                 <p className="font-medium">ファンクラブをはじめましょう</p>
                 <p className="mt-1 text-sm text-muted-foreground">
                   テンプレートを選んでカスタマイズするだけで簡単に始められます。
-                  月額料金や特典は自由に設定できます。
+                  {POC_FREE_MODE
+                    ? "プレオープン期間中は無料でお試しいただけます。"
+                    : "月額料金や特典は自由に設定できます。"}
                 </p>
               </div>
             </CardContent>
@@ -720,6 +750,28 @@ export default function FanClubPage() {
       {/* ──────────────────────────── */}
       {view === "detail" && plan && !isEditing && (
         <>
+          {/* PoC無料モードバナー */}
+          {POC_FREE_MODE && (
+            <Card className="border-amber-300 bg-gradient-to-r from-amber-50 to-orange-50">
+              <CardContent className="flex items-center justify-between p-4">
+                <div className="flex items-start gap-3">
+                  <span className="text-2xl">🎉</span>
+                  <div>
+                    <p className="font-bold text-amber-800">プレオープン特別無料期間</p>
+                    <p className="text-sm text-amber-700">
+                      推し登録 = ファンクラブ自動参加。限定メッセージでファンとつながりましょう！
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1.5 shrink-0 rounded-full bg-white/80 px-3 py-1.5">
+                  <Users className="h-4 w-4 text-primary" />
+                  <span className="text-sm font-bold text-primary">{memberCount}</span>
+                  <span className="text-[10px] text-muted-foreground">人</span>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           {/* ステータス + 公開トグル */}
           <Card className="border-primary/20 bg-warm">
             <CardContent className="flex items-center justify-between p-4">
@@ -781,12 +833,20 @@ export default function FanClubPage() {
               {/* 料金 */}
               <div>
                 <p className="text-xs text-muted-foreground">月額料金</p>
-                <p className="mt-0.5">
-                  <span className="text-2xl font-bold text-primary">
-                    {plan.price.toLocaleString()}
-                  </span>
-                  <span className="text-sm text-muted-foreground">円/月</span>
-                </p>
+                {POC_FREE_MODE ? (
+                  <div className="mt-0.5 flex items-center gap-2">
+                    <span className="text-2xl font-bold text-green-600">無料</span>
+                    <span className="text-sm text-muted-foreground line-through">¥{plan.price.toLocaleString()}/月</span>
+                    <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-700">プレオープン期間</span>
+                  </div>
+                ) : (
+                  <p className="mt-0.5">
+                    <span className="text-2xl font-bold text-primary">
+                      {plan.price.toLocaleString()}
+                    </span>
+                    <span className="text-sm text-muted-foreground">円/月</span>
+                  </p>
+                )}
               </div>
 
               {/* 説明 */}

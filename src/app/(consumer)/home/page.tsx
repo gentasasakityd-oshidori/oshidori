@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Sparkles, Heart, MessageCircle, BookOpen, MapPin, ArrowRight, TrendingUp } from "lucide-react";
+import { Sparkles, Heart, MessageCircle, BookOpen, MapPin, ArrowRight, TrendingUp, UtensilsCrossed, Zap, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { getPublishedShops } from "@/lib/queries";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
@@ -13,13 +13,13 @@ import { TrendingStoriesSection, type TrendingShopData } from "@/components/home
 import type { ShopWithRelations } from "@/types/database";
 
 export const metadata: Metadata = {
-  title: "オシドリ | こだわりの飲食店と出会う",
+  title: "オシドリ | 店主の推しメニューで飲食店と出会う",
   description:
-    "点数や口コミではわからない、店主の想いとこだわり。AIが引き出すストーリーで、あなただけの推し店を見つけよう。",
+    "食べログにはない「店主の声」で、あなたの\u201C何食べたい？\u201Dに応える。推しメニューとこだわりストーリーで、とっておきの一軒を見つけよう。",
   openGraph: {
-    title: "オシドリ | こだわりの飲食店と出会う",
+    title: "オシドリ | 店主の推しメニューで飲食店と出会う",
     description:
-      "点数や口コミではわからない、店主の想いとこだわり。AIが引き出すストーリーで、あなただけの推し店を見つけよう。",
+      "食べログにはない「店主の声」で、あなたの\u201C何食べたい？\u201Dに応える。推しメニューとこだわりストーリーで、とっておきの一軒を見つけよう。",
     url: "https://oshidori.vercel.app/home",
     type: "website",
   },
@@ -153,6 +153,60 @@ export default async function HomePage() {
     }
   } catch {
     // 認証エラーは無視
+  }
+
+  // 在庫速報（Supply Flash）を取得
+  type SupplyFlashPost = {
+    id: string;
+    title: string;
+    description: string | null;
+    image_url: string | null;
+    supply_type: string;
+    remaining_count: number | null;
+    expires_at: string | null;
+    created_at: string;
+    shop_name: string;
+    shop_slug: string;
+    shop_image: string | null;
+  };
+  let supplyFlashPosts: SupplyFlashPost[] = [];
+  try {
+    const supabase2 = await createServerSupabaseClient();
+    const now = new Date().toISOString();
+    const { data: flashData } = await (supabase2
+      .from("supply_flash_posts")
+      .select(`
+        id, title, description, image_url, supply_type,
+        remaining_count, expires_at, created_at,
+        shops!inner ( name, slug, image_url, is_published )
+      `)
+      .eq("is_active", true)
+      .eq("shops.is_published", true)
+      .or(`expires_at.is.null,expires_at.gt.${now}`)
+      .order("created_at", { ascending: false })
+      .limit(10) as unknown as Promise<{ data: unknown[] | null }>);
+
+    if (flashData) {
+      supplyFlashPosts = (flashData as unknown as Array<{
+        id: string; title: string; description: string | null; image_url: string | null;
+        supply_type: string; remaining_count: number | null; expires_at: string | null;
+        created_at: string; shops: { name: string; slug: string; image_url: string | null };
+      }>).map((item) => ({
+        id: item.id,
+        title: item.title,
+        description: item.description,
+        image_url: item.image_url,
+        supply_type: item.supply_type,
+        remaining_count: item.remaining_count,
+        expires_at: item.expires_at,
+        created_at: item.created_at,
+        shop_name: item.shops.name,
+        shop_slug: item.shops.slug,
+        shop_image: item.shops.image_url,
+      }));
+    }
+  } catch {
+    // Supply Flash取得失敗は無視
   }
 
   // ストーリーを持つ店舗のみ
@@ -301,11 +355,11 @@ export default async function HomePage() {
           <div className="flex min-h-[75vh] items-center justify-center bg-gradient-to-br from-[#FEF3EC] via-[#FFF8F4] to-[#FFF0E6] px-4">
             <div className="mx-auto max-w-5xl text-center">
               <h1 className="text-[22px] font-bold leading-tight md:text-[28px] font-heading">
-                店主の<span className="text-primary">こだわり</span>と
-                <span className="text-primary">ストーリー</span>で出会う
+                店主の<span className="text-primary">推しメニュー</span>と
+                <span className="text-primary">こだわり</span>で出会う
               </h1>
               <p className="mt-2 text-[13px] leading-relaxed text-[#5D6D7E]">
-                AIインタビューで引き出した店主の想いを読んで、共感でお店を選ぶ
+                食べログにはない「店主の声」で、あなたの&quot;何食べたい？&quot;に応える
               </p>
             </div>
           </div>
@@ -320,7 +374,7 @@ export default async function HomePage() {
       {/* Section 2: 気分で選ぶ（4択） */}
       <section className="px-4 py-6">
         <div className="mx-auto max-w-5xl">
-          <h2 className="text-base font-bold text-[#2C3E50] text-center font-heading md:text-lg">
+          <h2 className="text-balance text-base font-bold text-[#2C3E50] text-center font-heading md:text-lg">
             あなたはどんなお店が好きですか？
           </h2>
           <div className="mt-3 grid grid-cols-2 gap-2.5 md:grid-cols-4 md:gap-4">
@@ -345,6 +399,213 @@ export default async function HomePage() {
           </div>
         </div>
       </section>
+
+      {/* Supply Flash（在庫速報）セクション */}
+      {supplyFlashPosts.length > 0 && (
+        <section className="px-4 py-5 bg-gradient-to-r from-amber-50/60 to-orange-50/40">
+          <div className="mx-auto max-w-5xl">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Zap className="h-4 w-4 text-amber-500" />
+                <h2 className="text-base font-bold text-[#2C3E50] font-heading md:text-lg">
+                  在庫速報
+                </h2>
+                <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-700">
+                  NOW
+                </span>
+              </div>
+            </div>
+            <p className="text-[11px] text-muted-foreground mb-3">
+              今だけの限定メニュー・日替わり情報
+            </p>
+            {/* 横スクロール */}
+            <div className="relative">
+              <div className="flex gap-3 overflow-x-auto snap-x snap-mandatory pb-2 scrollbar-none -mx-1 px-1 pr-8">
+                {supplyFlashPosts.map((post) => {
+                  const typeEmoji: Record<string, string> = { limited: "🔥", seasonal: "🌸", special: "⭐", restock: "📦" };
+                  const typeLabel: Record<string, string> = { limited: "限定", seasonal: "季節", special: "特別", restock: "再入荷" };
+                  const hoursLeft = post.expires_at
+                    ? Math.max(0, Math.round((new Date(post.expires_at).getTime() - Date.now()) / (1000 * 60 * 60)))
+                    : null;
+                  return (
+                    <Link
+                      key={post.id}
+                      href={`/shops/${post.shop_slug}`}
+                      className="snap-start shrink-0 w-[72vw] max-w-[300px] min-w-[260px] group"
+                    >
+                      <div className="rounded-xl border border-amber-200/60 bg-white shadow-sm overflow-hidden transition-all hover:shadow-md hover:-translate-y-0.5">
+                        <div className="relative h-32 bg-gray-100">
+                          {(post.image_url || post.shop_image) ? (
+                            <img
+                              src={post.image_url || post.shop_image || ""}
+                              alt={post.title}
+                              className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+                            />
+                          ) : (
+                            <div className="flex h-full items-center justify-center bg-gradient-to-br from-amber-100 to-orange-50">
+                              <Zap className="h-8 w-8 text-amber-300" />
+                            </div>
+                          )}
+                          <span className="absolute top-2 left-2 inline-flex items-center gap-1 rounded-full bg-amber-500/90 px-2.5 py-0.5 text-[10px] font-bold text-white backdrop-blur-sm">
+                            {typeEmoji[post.supply_type] || "⚡"} {typeLabel[post.supply_type] || "速報"}
+                          </span>
+                          {post.remaining_count != null && (
+                            <span className="absolute bottom-2 right-2 rounded-full bg-white/90 px-2 py-0.5 text-[11px] font-bold text-red-600 shadow-sm backdrop-blur-sm">
+                              残り{post.remaining_count}
+                            </span>
+                          )}
+                        </div>
+                        <div className="p-3">
+                          <p className="text-[10px] text-muted-foreground">{post.shop_name}</p>
+                          <h3 className="mt-0.5 text-[14px] font-bold text-[#2C3E50] line-clamp-1">
+                            {post.title}
+                          </h3>
+                          {post.description && (
+                            <p className="mt-1 text-[11px] text-[#5D6D7E] line-clamp-2 leading-relaxed">
+                              {post.description}
+                            </p>
+                          )}
+                          {hoursLeft != null && (
+                            <div className="mt-2 flex items-center gap-1 text-[10px] text-amber-600">
+                              <Clock className="h-3 w-3" />
+                              <span>あと{hoursLeft > 0 ? `${hoursLeft}時間` : "まもなく終了"}</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </Link>
+                  );
+                })}
+              </div>
+              <div className="pointer-events-none absolute right-0 top-0 bottom-2 w-8 bg-gradient-to-l from-amber-50/40 to-transparent" />
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* Section 2.5: 近くの店主の推し（推しメニュー横スクロール） */}
+      {shopsWithStories.length > 0 && (
+        <section className="px-4 py-5 bg-gradient-to-br from-orange-50/30 to-amber-50/20">
+          <div className="mx-auto max-w-5xl">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <UtensilsCrossed className="h-4 w-4 text-primary" />
+                <h2 className="text-base font-bold text-[#2C3E50] font-heading md:text-lg">
+                  店主の推しメニュー
+                </h2>
+              </div>
+              <Link
+                href="/explore?sort=recommended"
+                className="text-xs text-primary hover:underline"
+              >
+                もっと見る
+              </Link>
+            </div>
+            <p className="text-[11px] text-muted-foreground mb-3">
+              食べログには載らない、店主だけが知っている「推しの理由」
+            </p>
+            {/* モバイル: 横スクロール */}
+            <div className="relative md:hidden">
+              <div className="flex gap-3 overflow-x-auto snap-x snap-mandatory pb-2 scrollbar-none -mx-1 px-1 pr-8">
+                {shopsWithStories.slice(0, 8).map((shop) => {
+                  const menu = shop.menus?.[0];
+                  return (
+                    <Link
+                      key={shop.id}
+                      href={`/shops/${shop.slug}`}
+                      className="snap-start shrink-0 w-[70vw] max-w-[280px] min-w-[240px] group"
+                    >
+                      <div className="rounded-xl border border-gray-100 bg-white shadow-sm overflow-hidden transition-all hover:shadow-md hover:-translate-y-0.5">
+                        {/* メニュー画像 or 店舗画像 */}
+                        <div className="relative h-32 bg-gray-100">
+                          {shop.image_url ? (
+                            <img
+                              src={shop.image_url}
+                              alt={shop.name}
+                              className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+                            />
+                          ) : (
+                            <div className="flex h-full items-center justify-center bg-gradient-to-br from-orange-100 to-amber-50">
+                              <UtensilsCrossed className="h-8 w-8 text-primary/30" />
+                            </div>
+                          )}
+                          {/* 推しバッジ */}
+                          <span className="absolute top-2 left-2 inline-flex items-center gap-1 rounded-full bg-primary/90 px-2.5 py-0.5 text-[10px] font-bold text-white backdrop-blur-sm">
+                            🔥 店主の推し
+                          </span>
+                        </div>
+                        <div className="p-3">
+                          <p className="text-[10px] text-muted-foreground">{shop.area} · {shop.name}</p>
+                          <h3 className="mt-0.5 text-[14px] font-bold text-[#2C3E50] line-clamp-1">
+                            {menu?.name ?? shop.stories[0]?.title ?? "おすすめメニュー"}
+                          </h3>
+                          {/* 店主のコメント（一次情報） */}
+                          <p className="mt-1 text-[11px] text-[#5D6D7E] line-clamp-2 leading-relaxed">
+                            {shop.stories[0]?.hook_sentence ?? shop.stories[0]?.summary ?? "店主のこだわりが詰まった一品"}
+                          </p>
+                          {/* こだわりタグ */}
+                          <div className="mt-2 flex gap-1 flex-wrap">
+                            {getDisplayTags(shop).slice(0, 2).map((tag) => (
+                              <span
+                                key={tag.label}
+                                className="inline-flex items-center gap-0.5 rounded-full bg-gray-50 px-2 py-0.5 text-[10px] text-[#5D6D7E]"
+                              >
+                                {tag.icon} {tag.label}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    </Link>
+                  );
+                })}
+              </div>
+              <div className="pointer-events-none absolute right-0 top-0 bottom-2 w-8 bg-gradient-to-l from-orange-50/30 to-transparent" />
+            </div>
+            {/* デスクトップ: グリッド */}
+            <div className="hidden md:grid md:grid-cols-3 lg:grid-cols-4 gap-4">
+              {shopsWithStories.slice(0, 8).map((shop) => {
+                const menu = shop.menus?.[0];
+                return (
+                  <Link
+                    key={shop.id}
+                    href={`/shops/${shop.slug}`}
+                    className="group"
+                  >
+                    <div className="rounded-xl border border-gray-100 bg-white shadow-sm overflow-hidden transition-all hover:shadow-md hover:-translate-y-0.5">
+                      <div className="relative h-28 bg-gray-100">
+                        {shop.image_url ? (
+                          <img
+                            src={shop.image_url}
+                            alt={shop.name}
+                            className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+                          />
+                        ) : (
+                          <div className="flex h-full items-center justify-center bg-gradient-to-br from-orange-100 to-amber-50">
+                            <UtensilsCrossed className="h-6 w-6 text-primary/30" />
+                          </div>
+                        )}
+                        <span className="absolute top-2 left-2 inline-flex items-center gap-1 rounded-full bg-primary/90 px-2 py-0.5 text-[10px] font-bold text-white backdrop-blur-sm">
+                          🔥 推し
+                        </span>
+                      </div>
+                      <div className="p-3">
+                        <p className="text-[10px] text-muted-foreground">{shop.area} · {shop.name}</p>
+                        <h3 className="mt-0.5 text-[13px] font-bold text-[#2C3E50] line-clamp-1">
+                          {menu?.name ?? shop.stories[0]?.title ?? "おすすめメニュー"}
+                        </h3>
+                        <p className="mt-1 text-[11px] text-[#5D6D7E] line-clamp-2 leading-relaxed">
+                          {shop.stories[0]?.hook_sentence ?? "店主のこだわりが詰まった一品"}
+                        </p>
+                      </div>
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* Section 3: みんなが共感しているストーリー（位置情報対応） */}
       {trendingCandidates.length > 0 && (
@@ -472,7 +733,7 @@ export default async function HomePage() {
         <div className="mx-auto max-w-5xl">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-lg font-bold flex items-center gap-1.5 font-heading md:text-xl">
+              <h2 className="text-balance text-lg font-bold flex items-center gap-1.5 font-heading md:text-xl">
                 ☀️ あなたとの相性予報
               </h2>
             </div>
@@ -640,7 +901,7 @@ export default async function HomePage() {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <MapPin className="h-4 w-4 text-primary" />
-                <h2 className="text-lg font-bold font-heading md:text-xl">近くの新着ストーリー</h2>
+                <h2 className="text-balance text-lg font-bold font-heading md:text-xl">近くの新着ストーリー</h2>
               </div>
               <Link
                 href="/explore?sort=newest"
@@ -710,38 +971,38 @@ export default async function HomePage() {
       {/* Section: オシドリとは */}
       <section className="px-4 py-10">
         <div className="mx-auto max-w-5xl">
-          <h2 className="text-center text-lg font-bold text-[#2C3E50] font-heading md:text-xl">
+          <h2 className="text-balance text-center text-lg font-bold text-[#2C3E50] font-heading md:text-xl">
             オシドリとは？
           </h2>
-          <p className="mt-1 text-center text-xs text-muted-foreground md:text-sm">
+          <p className="text-pretty mt-1 text-center text-xs text-muted-foreground md:text-sm">
             飲食店と食べる人の新しい関係をつくるプラットフォーム
           </p>
           <div className="mt-6 grid gap-4 sm:grid-cols-3">
             <div className="rounded-xl border border-gray-100 bg-white p-5 md:p-6 text-center shadow-sm">
               <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-primary/10 to-orange-100">
-                <Sparkles className="h-6 w-6 text-primary" />
+                <UtensilsCrossed className="h-6 w-6 text-primary" />
               </div>
-              <h3 className="mt-3 font-semibold text-[#2C3E50] font-heading">店主の想いを物語に</h3>
-              <p className="mt-1.5 text-[13px] leading-relaxed text-muted-foreground">
-                AIインタビューで店主の言葉を引き出し、お店の魅力をストーリーに
+              <h3 className="text-balance mt-3 font-semibold text-[#2C3E50] font-heading">推しメニューで見つかる</h3>
+              <p className="text-balance mt-1.5 text-[13px] leading-relaxed text-muted-foreground">
+                店主が自信を持って推す一品から、あなたの&quot;何食べたい？&quot;に応える
               </p>
             </div>
             <div className="rounded-xl border border-gray-100 bg-white p-5 md:p-6 text-center shadow-sm">
               <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-pink-50 to-rose-100">
-                <Heart className="h-6 w-6 text-rose-500" />
+                <Sparkles className="h-6 w-6 text-rose-500" />
               </div>
-              <h3 className="mt-3 font-semibold text-[#2C3E50] font-heading">共感で出会う</h3>
-              <p className="mt-1.5 text-[13px] leading-relaxed text-muted-foreground">
-                点数や口コミではなく、こだわりへの「共感」でお店を選ぶ新しい体験
+              <h3 className="text-balance mt-3 font-semibold text-[#2C3E50] font-heading">店主の声（一次情報）</h3>
+              <p className="text-balance mt-1.5 text-[13px] leading-relaxed text-muted-foreground">
+                口コミサイトにはない、店主だけが知っている&quot;推しの理由&quot;と&quot;美味しい食べ方&quot;
               </p>
             </div>
             <div className="rounded-xl border border-gray-100 bg-white p-5 md:p-6 text-center shadow-sm">
               <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-blue-50 to-cyan-100">
-                <MessageCircle className="h-6 w-6 text-blue-500" />
+                <Heart className="h-6 w-6 text-blue-500" />
               </div>
-              <h3 className="mt-3 font-semibold text-[#2C3E50] font-heading">推しでつながる</h3>
-              <p className="mt-1.5 text-[13px] leading-relaxed text-muted-foreground">
-                好きなお店を推し登録。あなたの「推し」がお店に届く
+              <h3 className="text-balance mt-3 font-semibold text-[#2C3E50] font-heading">共感でつながる</h3>
+              <p className="text-balance mt-1.5 text-[13px] leading-relaxed text-muted-foreground">
+                こだわりに共感して推し登録。お店との特別なつながりが生まれる
               </p>
             </div>
           </div>
@@ -751,11 +1012,11 @@ export default async function HomePage() {
       {/* Section 7: 飲食店オーナーCTA */}
       <section className="bg-primary px-4 py-12">
         <div className="mx-auto max-w-3xl text-center">
-          <h2 className="text-2xl font-bold text-primary-foreground font-heading">飲食店オーナーの方へ</h2>
-          <p className="mt-3 text-sm opacity-90 text-primary-foreground">
-            あなたの&quot;こだわり&quot;を引き出し、プロ品質のストーリーに。
+          <h2 className="text-balance text-2xl font-bold text-primary-foreground font-heading">飲食店オーナーの方へ</h2>
+          <p className="text-balance mt-3 text-sm opacity-90 text-primary-foreground">
+            あなたの&quot;推しメニュー&quot;と&quot;こだわり&quot;を、プロ品質のコンテンツに。
             <br />
-            発信が苦手でも大丈夫。30分の対話だけで、お店の魅力が伝わります。
+            発信が苦手でも大丈夫。対話するだけで、食べログにはないあなただけのページが完成します。
           </p>
           <Button size="lg" variant="secondary" className="mt-6" asChild>
             <Link href="/for-shops">無料で始める</Link>

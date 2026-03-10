@@ -110,6 +110,40 @@ export function trackQRAccess(params: {
   }
 }
 
+/** ファンクラブ参加 */
+export function trackFanClubJoin(params: {
+  shopId: string;
+  shopSlug: string;
+  isFreeMode: boolean;
+}) {
+  try {
+    posthog.capture("fan_club_join", {
+      shop_id: params.shopId,
+      shop_slug: params.shopSlug,
+      is_free_mode: params.isFreeMode,
+      timestamp: new Date().toISOString(),
+    });
+  } catch {
+    // PostHog未初期化時は無視
+  }
+}
+
+/** ファンクラブ離脱 */
+export function trackFanClubLeave(params: {
+  shopId: string;
+  shopSlug: string;
+}) {
+  try {
+    posthog.capture("fan_club_leave", {
+      shop_id: params.shopId,
+      shop_slug: params.shopSlug,
+      timestamp: new Date().toISOString(),
+    });
+  } catch {
+    // PostHog未初期化時は無視
+  }
+}
+
 /** コレクションシェア */
 export function trackCollectionShare(params: {
   platform?: "line" | "twitter" | "clipboard";

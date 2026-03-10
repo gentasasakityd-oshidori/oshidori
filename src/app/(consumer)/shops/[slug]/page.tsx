@@ -10,7 +10,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { getShopBySlug as getDummyShopBySlug } from "@/lib/dummy-data";
-import { EMPATHY_TAGS, STORY_PERSPECTIVE_LABELS, BUDGET_LABELS } from "@/lib/constants";
+import { EMPATHY_TAGS, STORY_PERSPECTIVE_LABELS, BUDGET_LABELS, POC_FREE_MODE } from "@/lib/constants";
 import { generateShopEmpathyCards } from "@/lib/shop-empathy-cards";
 import { WORDING } from "@/constants/wording";
 import { THEME_TO_DISPLAY_TAG } from "@/lib/display-tags";
@@ -25,7 +25,7 @@ import { StoryReader } from "@/components/story-reader";
 const EngagementPrompt = dynamic(() => import("@/components/engagement-prompt").then(m => m.EngagementPrompt), { ssr: false });
 const ExperienceProfile = dynamic(() => import("@/components/experience-profile").then(m => m.ExperienceProfile), { ssr: false });
 const CheckinOshiFlow = dynamic(() => import("@/components/checkin-oshi-flow").then(m => m.CheckinOshiFlow), { ssr: false });
-import { trackStoryViewStart, trackStoryScrollDepth, trackQRAccess, trackUserLastAction } from "@/lib/tracking";
+import { trackStoryViewStart, trackStoryScrollDepth, trackQRAccess, trackUserLastAction, trackFanClubJoin, trackFanClubLeave } from "@/lib/tracking";
 
 export default function ShopDetailPage() {
   const params = useParams();
@@ -55,6 +55,11 @@ export default function ShopDetailPage() {
   const [fanCount, setFanCount] = useState(0);
   // 近況更新
   const [shopUpdates, setShopUpdates] = useState<{ id: string; content: string; created_at: string }[]>([]);
+  // 在庫速報
+  const [supplyFlashPosts, setSupplyFlashPosts] = useState<Array<{
+    id: string; title: string; description: string | null; image_url: string | null;
+    supply_type: string; remaining_count: number | null; expires_at: string | null; created_at: string;
+  }>>([]);
   // ファンクラブ
   const [fanClubPlan, setFanClubPlan] = useState<{ plan_name: string; price: number; description: string | null; benefits: unknown } | null>(null);
   const [photoIndex, setPhotoIndex] = useState(0);
@@ -205,6 +210,10 @@ export default function ShopDetailPage() {
         fetch(`/api/fan-club?shopId=${typedShop.id}`).then(r => r.ok ? r.json() : null).then(d => {
           if (d?.plan) setFanClubPlan(d.plan);
         }).catch(() => {});
+        // 在庫速報取得
+        fetch(`/api/supply-flash?shopId=${typedShop.id}`).then(r => r.ok ? r.json() : null).then(d => {
+          if (d?.posts) setSupplyFlashPosts(d.posts);
+        }).catch(() => {});
       } catch {
         const dummy = getDummyShopBySlug(slug);
         setShop(dummy ?? null);
@@ -257,8 +266,8 @@ export default function ShopDetailPage() {
         <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-gray-100">
           <span className="text-2xl text-gray-300">🍽</span>
         </div>
-        <h2 className="text-lg font-bold text-[#2C3E50]">お店が見つかりません</h2>
-        <p className="mt-2 text-center text-sm text-gray-400">
+        <h2 className="text-balance text-lg font-bold text-[#2C3E50]">お店が見つかりません</h2>
+        <p className="text-pretty mt-2 text-center text-sm text-gray-400">
           お探しのお店は削除されたか、URLが正しくない可能性があります
         </p>
         <Button asChild className="mt-4">
@@ -515,7 +524,7 @@ export default function ShopDetailPage() {
             </div>
           )}
           <div className="flex-1 min-w-0">
-            <h1 className="text-lg font-bold text-[#2C3E50] leading-snug">{shop.name}</h1>
+            <h1 className="text-balance text-lg font-bold text-[#2C3E50] leading-snug">{shop.name}</h1>
             <p className="text-sm text-gray-500">
               {shop.area} · {shop.category}
             </p>
@@ -600,6 +609,55 @@ export default function ShopDetailPage() {
         </section>
       )}
 
+      {/* 店主の推しメニュー（タブの上に常時表示） */}
+      {shop.menus.length > 0 && (
+        <section className="px-4 py-4 bg-gradient-to-br from-orange-50/40 to-amber-50/20 border-t border-orange-100/50">
+          <div className="flex items-center gap-2 mb-3">
+            <span className="text-base">🔥</span>
+            <h2 className="text-sm font-bold text-[#2C3E50]">店主の推しメニュー</h2>
+            <span className="text-[10px] text-primary/60 bg-primary/5 px-2 py-0.5 rounded-full">一次情報</span>
+          </div>
+          <div className="flex gap-3 overflow-x-auto snap-x snap-mandatory pb-1 scrollbar-none -mx-1 px-1 pr-4">
+            {shop.menus.slice(0, 5).map((menu) => (
+              <div key={menu.id} className="snap-start shrink-0 w-[75vw] max-w-[300px] min-w-[250px]">
+                <div className="rounded-xl bg-white border border-gray-100 shadow-sm overflow-hidden">
+                  {menu.photo_url && (
+                    <div className="relative h-36 overflow-hidden">
+                      <Image src={menu.photo_url} alt={menu.name} fill className="object-cover" sizes="300px" />
+                      <span className="absolute top-2 left-2 inline-flex items-center gap-1 rounded-full bg-primary/90 px-2.5 py-0.5 text-[10px] font-bold text-white backdrop-blur-sm">
+                        🔥 推し
+                      </span>
+                    </div>
+                  )}
+                  <div className="p-3">
+                    <div className="flex items-start justify-between">
+                      <h3 className="text-[15px] font-bold text-[#2C3E50]">{menu.name}</h3>
+                      {menu.price && (
+                        <span className="shrink-0 text-sm font-semibold text-[#E06A4E]">
+                          ¥{menu.price.toLocaleString()}
+                        </span>
+                      )}
+                    </div>
+                    {/* 店主のコメント（一次情報: 食べログにはない情報） */}
+                    {menu.owner_message && (
+                      <div className="mt-2 border-l-2 border-[#E06A4E]/30 pl-2.5">
+                        <p className="text-[12px] italic leading-relaxed text-[#2C3E50]/80">
+                          「{menu.owner_message}」
+                        </p>
+                        <p className="mt-0.5 text-right text-[10px] text-gray-400">— {shop.owner_name}</p>
+                      </div>
+                    )}
+                    {menu.description && !menu.owner_message && (
+                      <p className="mt-1.5 text-[11px] text-gray-500 line-clamp-2">{menu.description}</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
       {/* コンテンツタブ */}
       <div className="border-t border-gray-100">
         <div className="flex">
@@ -666,7 +724,7 @@ export default function ShopDetailPage() {
             {/* インライン展開（全文） */}
             {showStoryModal && (
               <div className="animate-in fade-in duration-300">
-                <h3 className="text-lg font-bold leading-snug text-[#2C3E50]">{mainStory.title}</h3>
+                <h3 className="text-balance text-lg font-bold leading-snug text-[#2C3E50]">{mainStory.title}</h3>
                 {mainStory.body && (
                   <div className="mt-1 flex items-center justify-between">
                     <p className="text-xs text-gray-400">
@@ -765,7 +823,7 @@ export default function ShopDetailPage() {
       {/* メニュータブ */}
       {activeContentTab === "menu" && shop.menus.length > 0 && (
         <section className="px-4 py-5">
-          <h2 className="text-sm font-bold text-[#2C3E50] mb-3">食べてほしい一品</h2>
+          <h2 className="text-sm font-bold text-[#2C3E50] mb-3">メニュー一覧</h2>
           <div className="space-y-4">
             {shop.menus.map((menu) => (
               <Card key={menu.id} className="overflow-hidden border-gray-100 shadow-sm">
@@ -859,6 +917,53 @@ export default function ShopDetailPage() {
             </div>
           )}
         </div>
+
+        {/* 在庫速報 */}
+        {supplyFlashPosts.length > 0 && (
+          <div className="mt-4">
+            <h3 className="mb-2 flex items-center gap-1.5 text-xs font-medium text-amber-600">
+              <span className="text-sm">⚡</span>
+              在庫速報
+            </h3>
+            <div className="space-y-2">
+              {supplyFlashPosts.slice(0, 3).map((post) => {
+                const typeEmoji = { limited: "🔥", seasonal: "🌸", special: "✨", restock: "📦" }[post.supply_type] || "⚡";
+                return (
+                  <div key={post.id} className="rounded-xl border border-amber-200 bg-gradient-to-r from-amber-50/80 to-orange-50/40 p-3">
+                    <div className="flex items-start gap-2">
+                      {post.image_url && (
+                        <div className="h-12 w-12 shrink-0 overflow-hidden rounded-lg">
+                          <img src={post.image_url} alt="" className="h-full w-full object-cover" />
+                        </div>
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs">{typeEmoji}</span>
+                          <p className="text-sm font-bold text-[#2C3E50] truncate">{post.title}</p>
+                        </div>
+                        {post.description && (
+                          <p className="mt-0.5 text-xs text-gray-500 line-clamp-1">{post.description}</p>
+                        )}
+                        <div className="mt-1 flex items-center gap-2 text-[10px] text-gray-400">
+                          {post.remaining_count != null && (
+                            <span className="font-medium text-amber-600">残り{post.remaining_count}</span>
+                          )}
+                          {post.expires_at && (
+                            <span>
+                              {new Date(post.expires_at) > new Date()
+                                ? `${Math.ceil((new Date(post.expires_at).getTime() - Date.now()) / (60 * 60 * 1000))}時間以内`
+                                : "終了"}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* 近況更新 */}
         {shopUpdates.length > 0 && (
@@ -984,9 +1089,18 @@ export default function ShopDetailPage() {
       {/* ファンクラブ */}
       {fanClubPlan && (
         <section className="border-t border-gray-100 px-4 py-5">
-          <h2 className="text-sm font-bold text-[#2C3E50] mb-2">💎 ファンクラブ</h2>
+          <div className="flex items-center gap-2 mb-2">
+            <h2 className="text-sm font-bold text-[#2C3E50]">💎 ファンクラブ</h2>
+            {POC_FREE_MODE && (
+              <span className="rounded-full bg-gradient-to-r from-amber-400 to-orange-400 px-2 py-0.5 text-[10px] font-bold text-white">
+                プレオープン無料
+              </span>
+            )}
+          </div>
           <p className="text-xs text-gray-500 mb-3">
-            月額で店主を推そう。ファンクラブ限定の特典が届く
+            {POC_FREE_MODE
+              ? "今なら無料でファンクラブに参加できます。推し登録するだけ！"
+              : "月額で店主を推そう。ファンクラブ限定の特典が届く"}
           </p>
           <Card className="border-orange-100 bg-gradient-to-r from-orange-50/30 to-amber-50/20">
             <CardContent className="p-4">
@@ -997,20 +1111,55 @@ export default function ShopDetailPage() {
                     <p className="text-xs text-gray-500 mt-0.5">{fanClubPlan.description}</p>
                   )}
                 </div>
-                <p className="text-sm font-bold text-[#E06A4E]">¥{fanClubPlan.price.toLocaleString()}<span className="text-xs font-normal text-gray-400">/月</span></p>
+                {POC_FREE_MODE ? (
+                  <div className="text-right">
+                    <p className="text-sm font-bold text-green-600">無料</p>
+                    <p className="text-[10px] text-gray-400 line-through">¥{fanClubPlan.price.toLocaleString()}/月</p>
+                  </div>
+                ) : (
+                  <p className="text-sm font-bold text-[#E06A4E]">¥{fanClubPlan.price.toLocaleString()}<span className="text-xs font-normal text-gray-400">/月</span></p>
+                )}
               </div>
               {Array.isArray(fanClubPlan.benefits) && fanClubPlan.benefits.length > 0 && (
                 <div className="mt-3 flex flex-wrap gap-1.5">
-                  {(fanClubPlan.benefits as string[]).map((benefit, i) => (
-                    <span key={i} className="inline-flex items-center rounded-full bg-orange-50 px-2 py-0.5 text-[11px] text-[#E06A4E]">
-                      ✓ {benefit}
-                    </span>
-                  ))}
+                  {(fanClubPlan.benefits as string[]).map((benefit, i) => {
+                    // PoC無料モードでは有料機能に「Coming Soon」表示
+                    const paidOnlyBenefits = ["予約優先権", "限定イベント参加", "店主との交流会", "記念日サプライズ", "特別体験への招待", "オリジナルグッズ"];
+                    const isPaidOnly = POC_FREE_MODE && paidOnlyBenefits.includes(benefit);
+                    return (
+                      <span key={i} className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] ${isPaidOnly ? "bg-gray-100 text-gray-400" : "bg-orange-50 text-[#E06A4E]"}`}>
+                        {isPaidOnly ? "🔒 " : "✓ "}{benefit}
+                        {isPaidOnly && <span className="ml-1 text-[9px]">(Coming Soon)</span>}
+                      </span>
+                    );
+                  })}
                 </div>
               )}
-              <Button disabled className="w-full mt-3 opacity-60" size="sm" variant="outline">
-                近日公開
-              </Button>
+              {POC_FREE_MODE ? (
+                <Button
+                  className="w-full mt-3"
+                  size="sm"
+                  variant={isOshi ? "outline" : "default"}
+                  onClick={() => {
+                    if (!isAuthenticated) { router.push(`/login?next=/shops/${slug}`); return; }
+                    if (isOshi) {
+                      // 既に参加中 → 解除
+                      trackFanClubLeave({ shopId: shop?.id ?? "", shopSlug: slug });
+                    } else {
+                      // 参加 = 推し登録
+                      trackFanClubJoin({ shopId: shop?.id ?? "", shopSlug: slug, isFreeMode: true });
+                    }
+                    // 推し登録トグル（既存の仕組みを利用）
+                    handleOshiToggle();
+                  }}
+                >
+                  {isOshi ? "✓ ファンクラブ参加中" : "無料で参加する"}
+                </Button>
+              ) : (
+                <Button disabled className="w-full mt-3 opacity-60" size="sm" variant="outline">
+                  近日公開
+                </Button>
+              )}
             </CardContent>
           </Card>
         </section>

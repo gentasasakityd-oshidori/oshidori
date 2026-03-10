@@ -3,7 +3,7 @@
 import { useState, useMemo, useEffect, useCallback, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
-import { Search, SlidersHorizontal, X, Loader2, List, MapPin, ChevronDown, Settings } from "lucide-react";
+import { Search, SlidersHorizontal, X, Loader2, List, MapPin, ChevronDown } from "lucide-react";
 import { useGeolocation } from "@/hooks/use-geolocation";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -27,9 +27,13 @@ const BUDGET_PRICE_STEPS = [
   { value: 20000, label: "20,000円" },
 ] as const;
 import { HorizontalCard } from "@/components/shop-cards/horizontal-card";
+import { MenuCard, type MenuSearchResult } from "@/components/menu-card";
+import { Utensils } from "lucide-react";
 
 import type { ShopWithRelations } from "@/types/database";
 import { trackFilterUse } from "@/lib/posthog";
+
+import type { MapBounds } from "@/components/map-view";
 
 const MapView = dynamic(() => import("@/components/map-view").then((m) => m.MapView), {
   ssr: false,
@@ -257,9 +261,51 @@ function ShopRequestSection() {
   );
 }
 
+type SearchTab = "shops" | "menus";
+
 function ExploreContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
+
+  // 検索モードタブ
+  const initialTab = searchParams.get("tab") === "menus" ? "menus" : "shops";
+  const [searchTab, setSearchTab] = useState<SearchTab>(initialTab);
+
+  // メニュー検索用ステート
+  const [menuQuery, setMenuQuery] = useState("");
+  const [menuCategory, setMenuCategory] = useState("");
+  const [menuPriceMin, setMenuPriceMin] = useState(0);
+  const [menuPriceMax, setMenuPriceMax] = useState(0);
+  const [menuResults, setMenuResults] = useState<MenuSearchResult[]>([]);
+  const [menuLoading, setMenuLoading] = useState(false);
+  const [menuSearched, setMenuSearched] = useState(false);
+
+  const searchMenus = useCallback(async () => {
+    setMenuLoading(true);
+    setMenuSearched(true);
+    try {
+      const params = new URLSearchParams();
+      if (menuQuery) params.set("q", menuQuery);
+      if (menuCategory) params.set("category", menuCategory);
+      if (menuPriceMin > 0) params.set("priceMin", String(menuPriceMin));
+      if (menuPriceMax > 0) params.set("priceMax", String(menuPriceMax));
+      const res = await fetch(`/api/menus/search?${params.toString()}`);
+      if (res.ok) {
+        const data = await res.json();
+        setMenuResults(data.menus ?? []);
+      }
+    } catch {
+      // ignore
+    }
+    setMenuLoading(false);
+  }, [menuQuery, menuCategory, menuPriceMin, menuPriceMax]);
+
+  // タブ初回切替時にメニュー全件取得
+  useEffect(() => {
+    if (searchTab === "menus" && !menuSearched) {
+      searchMenus();
+    }
+  }, [searchTab, menuSearched, searchMenus]);
 
   // Parse initial values from URL (comma-separated for multi-select)
   const parseSet = (key: string): Set<string> => {
@@ -277,12 +323,27 @@ function ExploreContent() {
   const [budgetMax, setBudgetMax] = useState<number>(0); // 0 = 指定なし（上限なし）
   const [selectedThemes, setSelectedThemes] = useState<Set<string>>(() => parseSet("theme"));
   const [selectedMoodTags, setSelectedMoodTags] = useState<Set<MoodTagValue>>(() => parseSet("mood") as Set<MoodTagValue>);
-  const [sortMode, setSortMode] = useState<SortMode>("forecast");
+  // URL パラメータから初期ソート・位置情報を取得（SearchBar 経由の遷移対応）
+  const initialSort = searchParams.get("sort");
+  const urlLat = searchParams.get("lat");
+  const urlLng = searchParams.get("lng");
+  const [sortMode, setSortMode] = useState<SortMode>(
+    initialSort === "distance" || initialSort === "newest" ? initialSort : "forecast"
+  );
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [isSortOpen, setIsSortOpen] = useState(false);
   const [stationQuery, setStationQuery] = useState("");
   const geo = useGeolocation();
   const geoLoading = geo.loading;
+  // URL パラメータに lat/lng がある場合はそれを利用（SearchBar 経由）
+  const [urlLocation] = useState<{ lat: number; lng: number } | null>(() => {
+    if (urlLat && urlLng) {
+      const lat = parseFloat(urlLat);
+      const lng = parseFloat(urlLng);
+      if (!isNaN(lat) && !isNaN(lng)) return { lat, lng };
+    }
+    return null;
+  });
   const [viewMode, setViewMode] = useState<"list" | "map">(() => {
     if (typeof window !== "undefined") {
       const saved = sessionStorage.getItem("explore_viewMode");
@@ -293,8 +354,14 @@ function ExploreContent() {
   const [shops, setShops] = useState<ShopWithRelations[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
 
-  // Geolocation — useGeolocation フックを利用
-  const userLocation = geo.location;
+  // 食べログ風 地図検索用の状態
+  const [currentMapBounds, setCurrentMapBounds] = useState<MapBounds | null>(null);
+  const [activeMapBounds, setActiveMapBounds] = useState<MapBounds | null>(null);
+  const [mapMoved, setMapMoved] = useState(false);
+  const [highlightedShopSlug, setHighlightedShopSlug] = useState<string | null>(null);
+
+  // Geolocation — useGeolocation フックまたは URL パラメータを利用
+  const userLocation = geo.location ?? urlLocation;
   const geoError = geo.error;
 
   // viewModeをsessionStorageに保存
@@ -347,6 +414,26 @@ function ExploreContent() {
     if (sortMode !== "distance" || userLocation) return;
     requestGeolocation();
   }, [sortMode, userLocation, requestGeolocation]);
+
+  // 地図操作ハンドラー
+  const handleMapBoundsChanged = useCallback((bounds: MapBounds) => {
+    setCurrentMapBounds(bounds);
+  }, []);
+
+  const handleMapMoved = useCallback(() => {
+    setMapMoved(true);
+  }, []);
+
+  const handleReSearchArea = useCallback(() => {
+    setActiveMapBounds(currentMapBounds);
+    setMapMoved(false);
+  }, [currentMapBounds]);
+
+  // フィルター変更時に地図エリアフィルタをリセット
+  useEffect(() => {
+    setActiveMapBounds(null);
+    setMapMoved(false);
+  }, [query, selectedCategories, selectedStations, selectedThemes, selectedMoodTags, budgetMin, budgetMax]);
 
   const filteredAndSortedShops = useMemo(() => {
     // 1. Filter
@@ -437,6 +524,25 @@ function ExploreContent() {
 
     return sorted;
   }, [query, selectedStations, selectedCategories, budgetMin, budgetMax, selectedThemes, selectedMoodTags, shops, sortMode, userLocation]);
+
+  // 地図モード用: エリア内の店舗（地図表示 + リスト連動）
+  const mapDisplayShops = useMemo(() => {
+    // 位置情報のある店舗のみ対象
+    const shopsWithGeo = filteredAndSortedShops.filter(
+      (s) => s.basic_info?.latitude != null && s.basic_info?.longitude != null
+    );
+    // エリアフィルタ未設定時は全件表示
+    if (!activeMapBounds) return shopsWithGeo;
+    // エリアフィルタ適用
+    return shopsWithGeo.filter((shop) => {
+      const lat = shop.basic_info!.latitude!;
+      const lng = shop.basic_info!.longitude!;
+      return (
+        lat >= activeMapBounds.sw.lat && lat <= activeMapBounds.ne.lat &&
+        lng >= activeMapBounds.sw.lng && lng <= activeMapBounds.ne.lng
+      );
+    });
+  }, [filteredAndSortedShops, activeMapBounds]);
 
   // 店舗データから駅名リストを生成
   const stationList = useMemo(() => {
@@ -546,10 +652,138 @@ function ExploreContent() {
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-4">
-      {/* 検索ヘッダー */}
-      <div className="mb-1">
-        <h1 className="text-lg font-bold text-[#2C3E50]">お店をさがす</h1>
+      {/* 検索モードタブ */}
+      <div className="mb-3 flex gap-1 rounded-xl bg-gray-100 p-1">
+        <button
+          type="button"
+          onClick={() => setSearchTab("shops")}
+          className={`flex-1 rounded-lg py-2 text-sm font-medium transition-all ${
+            searchTab === "shops"
+              ? "bg-white text-[#2C3E50] shadow-sm"
+              : "text-gray-500 hover:text-gray-700"
+          }`}
+        >
+          <Search className="mr-1.5 inline-block h-3.5 w-3.5" />
+          お店から探す
+        </button>
+        <button
+          type="button"
+          onClick={() => setSearchTab("menus")}
+          className={`flex-1 rounded-lg py-2 text-sm font-medium transition-all ${
+            searchTab === "menus"
+              ? "bg-white text-[#2C3E50] shadow-sm"
+              : "text-gray-500 hover:text-gray-700"
+          }`}
+        >
+          <Utensils className="mr-1.5 inline-block h-3.5 w-3.5" />
+          メニューから探す
+        </button>
       </div>
+
+      {/* ─── メニュー検索タブ ─── */}
+      {searchTab === "menus" && (
+        <div>
+          <form
+            className="flex gap-2"
+            onSubmit={(e) => { e.preventDefault(); searchMenus(); }}
+          >
+            <div className="relative flex-1">
+              <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+              <Input
+                placeholder="メニュー名・食材・こだわりで探す..."
+                value={menuQuery}
+                onChange={(e) => setMenuQuery(e.target.value)}
+                className="rounded-xl border-gray-200 bg-gray-50/80 pl-10 shadow-sm focus:bg-white focus:shadow-md transition-all"
+              />
+            </div>
+            <Button type="submit" size="icon" className="rounded-xl shrink-0">
+              <Search className="h-4 w-4" />
+            </Button>
+          </form>
+
+          {/* メニュー用フィルター */}
+          <div className="mt-3 flex flex-wrap gap-2">
+            {/* カテゴリ */}
+            <select
+              value={menuCategory}
+              onChange={(e) => { setMenuCategory(e.target.value); }}
+              className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs text-gray-600"
+            >
+              <option value="">すべてのジャンル</option>
+              {CATEGORIES.map((cat) => (
+                <option key={cat} value={cat}>{cat}</option>
+              ))}
+            </select>
+
+            {/* 価格帯 */}
+            <select
+              value={menuPriceMin}
+              onChange={(e) => setMenuPriceMin(Number(e.target.value))}
+              className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs text-gray-600"
+            >
+              {BUDGET_PRICE_STEPS.map((s) => (
+                <option key={s.value} value={s.value}>
+                  {s.value === 0 ? "下限なし" : `${s.label}〜`}
+                </option>
+              ))}
+            </select>
+            <select
+              value={menuPriceMax}
+              onChange={(e) => setMenuPriceMax(Number(e.target.value))}
+              className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs text-gray-600"
+            >
+              {BUDGET_PRICE_STEPS.map((s) => (
+                <option key={s.value} value={s.value}>
+                  {s.value === 0 ? "上限なし" : `〜${s.label}`}
+                </option>
+              ))}
+            </select>
+
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="rounded-lg text-xs"
+              onClick={searchMenus}
+            >
+              絞り込む
+            </Button>
+          </div>
+
+          {/* メニュー検索結果 */}
+          <div className="mt-4">
+            {menuLoading ? (
+              <div className="flex items-center justify-center py-16">
+                <Loader2 className="h-8 w-8 animate-spin text-[#E06A4E]" />
+              </div>
+            ) : menuResults.length > 0 ? (
+              <>
+                <p className="mb-3 text-xs text-gray-400">
+                  {menuResults.length}件のメニューが見つかりました
+                </p>
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+                  {menuResults.map((menu) => (
+                    <MenuCard key={menu.id} menu={menu} />
+                  ))}
+                </div>
+              </>
+            ) : menuSearched ? (
+              <div className="flex flex-col items-center justify-center py-16 text-center">
+                <Utensils className="h-8 w-8 text-gray-300" />
+                <p className="mt-3 text-sm font-medium text-gray-500">
+                  条件に合うメニューが見つかりませんでした
+                </p>
+                <p className="mt-1 text-xs text-gray-400">
+                  キーワードや価格帯を変えて試してみてください
+                </p>
+              </div>
+            ) : null}
+          </div>
+        </div>
+      )}
+
+      {/* ─── お店検索タブ（既存） ─── */}
+      {searchTab === "shops" && (<>
 
       {/* Search bar — 丸角 + シャドウで目立たせる */}
       <form className="flex gap-2" onSubmit={handleSearchSubmit}>
@@ -823,28 +1057,18 @@ function ExploreContent() {
             type="button"
             onClick={requestGeolocation}
             disabled={geoLoading}
-            className={`flex items-center gap-1.5 rounded-full border px-4 py-2 text-xs transition-colors disabled:opacity-60 ${
-              geo.isDenied
-                ? "border-orange-200 bg-orange-50 text-orange-600 hover:bg-orange-100"
-                : "border-blue-200 bg-blue-50 text-blue-600 hover:bg-blue-100"
-            }`}
+            className="flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-4 py-2 text-xs text-blue-600 transition-colors hover:bg-blue-100 disabled:opacity-60"
           >
             {geoLoading ? (
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : geo.isDenied ? (
-              <Settings className="h-3.5 w-3.5" />
             ) : (
               <MapPin className="h-3.5 w-3.5" />
             )}
             <span>
-              {geoLoading
-                ? "位置情報を取得中..."
-                : geo.isDenied
-                  ? "位置情報の設定を確認する"
-                  : "現在地から近い順で探す"}
+              {geoLoading ? "位置情報を取得中..." : "現在地から近い順で探す"}
             </span>
           </button>
-          {!geoLoading && !geoError && !geo.isDenied && (
+          {!geoLoading && !geoError && (
             <p className="mt-1 text-[10px] text-gray-400 ml-1">タップすると位置情報の許可を求めます</p>
           )}
         </div>
@@ -938,8 +1162,8 @@ function ExploreContent() {
         </div>
       )}
 
-      {/* Result count + sort */}
-      {isLoaded && (
+      {/* Result count + sort (リスト表示時のみ) */}
+      {isLoaded && viewMode === "list" && (
         <div className="mt-3 flex items-center justify-between">
           <p className="text-xs text-gray-400">
             {filteredAndSortedShops.length}件のお店
@@ -981,16 +1205,6 @@ function ExploreContent() {
         <div className="mt-2 rounded-lg border border-orange-200 bg-orange-50 p-3">
           <p className="text-xs font-medium text-orange-600 mb-1">{geoError}</p>
 
-          {/* 拒否済み時: デバイス別の設定変更ガイド */}
-          {geo.settingsGuide && (
-            <div className="mb-2 rounded-md bg-white/70 p-2.5 border border-orange-100">
-              <p className="text-[11px] leading-relaxed text-gray-700">
-                <Settings className="inline h-3 w-3 mr-1 text-orange-500 -mt-0.5" />
-                {geo.settingsGuide}
-              </p>
-            </div>
-          )}
-
           <p className="text-xs text-gray-500 mb-1.5">代わりに駅で絞り込めます：</p>
           <div className="flex flex-wrap gap-1.5">
             {stationList.map((st) => (
@@ -1014,42 +1228,126 @@ function ExploreContent() {
         </div>
       )}
 
-      {/* Map View */}
+      {/* Map View — 食べログ風: 地図 + エリア内店舗リスト */}
       {isLoaded && viewMode === "map" && (() => {
-        const mapShops = filteredAndSortedShops
-          .filter((s) => s.basic_info?.latitude != null && s.basic_info?.longitude != null)
-          .map((s) => ({
-            slug: s.slug,
-            name: s.name,
-            area: s.area,
-            category: s.category,
-            latitude: s.basic_info!.latitude!,
-            longitude: s.basic_info!.longitude!,
-          }));
-        const shopsWithoutGeo = filteredAndSortedShops.filter(
-          (s) => s.basic_info?.latitude == null || s.basic_info?.longitude == null
-        );
+        const mapShops = mapDisplayShops.map((s) => ({
+          slug: s.slug,
+          name: s.name,
+          area: s.area,
+          category: s.category,
+          latitude: s.basic_info!.latitude!,
+          longitude: s.basic_info!.longitude!,
+        }));
         return (
           <div className="mt-3">
-            {mapShops.length > 0 ? (
-              <MapView
-                shops={mapShops}
-                onShopClick={(slug) => router.push(`/shops/${slug}`)}
-              />
-            ) : (
-              <div className="flex h-[400px] items-center justify-center rounded-xl border border-gray-200 bg-gray-50">
-                <div className="text-center px-4">
-                  <p className="text-sm text-gray-500 font-medium">
-                    {filteredAndSortedShops.length === 0
-                      ? "表示するお店がありません"
-                      : "地図に表示できるお店がありません"}
-                  </p>
-                  {shopsWithoutGeo.length > 0 && (
-                    <p className="text-xs text-gray-400 mt-1">
-                      {shopsWithoutGeo.length}件のお店に位置情報がありません
-                    </p>
-                  )}
+            {/* 地図 + このエリアで再検索ボタン */}
+            <div className="relative">
+              {mapShops.length > 0 ? (
+                <MapView
+                  shops={mapShops}
+                  onShopClick={(slug) => router.push(`/shops/${slug}`)}
+                  onBoundsChanged={handleMapBoundsChanged}
+                  onMapMoved={handleMapMoved}
+                  highlightedSlug={highlightedShopSlug}
+                  height="42vh"
+                />
+              ) : (
+                <div className="flex h-[300px] items-center justify-center rounded-xl border border-gray-200 bg-gray-50">
+                  <p className="text-sm text-gray-500">地図に表示できるお店がありません</p>
                 </div>
+              )}
+
+              {/* このエリアで再検索ボタン（地図下端に配置） */}
+              {mapMoved && (
+                <button
+                  onClick={handleReSearchArea}
+                  className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 flex items-center gap-1.5 rounded-full bg-white px-4 py-2 text-sm font-semibold text-[#E06A4E] shadow-lg border border-gray-200 hover:bg-orange-50 transition-all active:scale-95"
+                >
+                  <Search className="h-3.5 w-3.5" />
+                  このエリアで再検索
+                </button>
+              )}
+            </div>
+
+            {/* エリア内のフィルタ状態 */}
+            {activeMapBounds && (
+              <div className="mt-2 flex items-center justify-between">
+                <p className="text-[11px] text-gray-400">
+                  表示エリア内 {mapDisplayShops.length}件
+                </p>
+                <button
+                  type="button"
+                  onClick={() => { setActiveMapBounds(null); setMapMoved(false); }}
+                  className="text-[11px] text-[#E06A4E] hover:underline"
+                >
+                  エリア絞り込みを解除
+                </button>
+              </div>
+            )}
+
+            {/* 地図下の店舗リスト（番号付き） */}
+            <div className={activeMapBounds ? "mt-1" : "mt-3"}>
+              {!activeMapBounds && (
+                <p className="text-xs text-gray-400 mb-1">
+                  {mapDisplayShops.length}件のお店
+                </p>
+              )}
+              <div className="divide-y divide-gray-100">
+                {mapDisplayShops.map((shop, index) => {
+                  const mainStory = shop.stories[0];
+                  const forecastScore = computeForecastScore(shop, selectedThemes);
+                  const forecastReason = getForecastReason(shop, selectedThemes);
+                  const distKm =
+                    sortMode === "distance" && userLocation && shop.basic_info?.latitude != null && shop.basic_info?.longitude != null
+                      ? haversineDistance(userLocation.lat, userLocation.lng, shop.basic_info.latitude, shop.basic_info.longitude)
+                      : null;
+                  const walkingMin = distKm != null ? Math.round(distKm / 0.08) : null;
+                  return (
+                    <div
+                      key={shop.id}
+                      className="relative"
+                      onMouseEnter={() => setHighlightedShopSlug(shop.slug)}
+                      onMouseLeave={() => setHighlightedShopSlug(null)}
+                      onTouchStart={() => setHighlightedShopSlug(shop.slug)}
+                      onTouchEnd={() => setHighlightedShopSlug(null)}
+                    >
+                      {/* 番号バッジ — 地図マーカーと連動 */}
+                      <div className="absolute left-0 top-3 z-10 flex h-6 w-6 items-center justify-center rounded-full bg-[#E06A4E] text-[11px] font-bold text-white shadow-sm">
+                        {index + 1}
+                      </div>
+                      <div className="pl-8">
+                        <HorizontalCard
+                          shopSlug={shop.slug}
+                          shopName={shop.name}
+                          area={shop.area}
+                          imageUrl={shop.image_url}
+                          hookSentence={
+                            mainStory?.catchcopy_primary ??
+                            mainStory?.hook_sentence ??
+                            mainStory?.summary ??
+                            null
+                          }
+                          displayTags={getDisplayTags(shop)}
+                          forecastScore={forecastScore > 0 ? forecastScore : null}
+                          forecastReasonText={forecastReason}
+                          walkingMinutes={walkingMin}
+                          budgetLabel={shop.basic_info?.budget_label_dinner ?? shop.basic_info?.budget_label_lunch ?? null}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* 地図モードでも店舗リクエストを表示 */}
+            <ShopRequestSection />
+
+            {/* 0件表示 */}
+            {mapDisplayShops.length === 0 && (
+              <div className="py-10 text-center">
+                <p className="text-sm text-gray-500">このエリアにお店がありません</p>
+                <p className="mt-1 text-xs text-gray-400">地図を移動して「このエリアで再検索」を押してください</p>
               </div>
             )}
           </div>
@@ -1131,6 +1429,8 @@ function ExploreContent() {
           </Button>
         </div>
       )}
+
+      </>)}
     </div>
   );
 }

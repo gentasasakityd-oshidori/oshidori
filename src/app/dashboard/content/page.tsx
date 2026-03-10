@@ -8,12 +8,13 @@ import {
   UtensilsCrossed,
   Camera,
   Share2,
+  Zap,
   ArrowRight,
   ChevronRight,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 
-type ContentSection = "stories" | "updates" | "menus" | "photos" | "sns";
+type ContentSection = "stories" | "updates" | "supply-flash" | "menus" | "photos" | "sns";
 
 const CONTENT_SECTIONS: {
   id: ContentSection;
@@ -38,6 +39,14 @@ const CONTENT_SECTIONS: {
     icon: Megaphone,
     href: "/dashboard/updates",
     emoji: "📝",
+  },
+  {
+    id: "supply-flash",
+    label: "在庫速報",
+    description: "限定メニューや日替わり情報を即座にお知らせ",
+    icon: Zap,
+    href: "/dashboard/supply-flash",
+    emoji: "⚡",
   },
   {
     id: "menus",

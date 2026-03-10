@@ -214,3 +214,8 @@ export const EMOTION_TAGS = [
 ] as const;
 
 export type EmotionTagId = (typeof EMOTION_TAGS)[number]["id"];
+
+// PoC期間中の無料モードフラグ
+// true: ファンクラブ参加が無料（推し登録 = ファンクラブ参加）
+// false: 通常の有料ファンクラブモード
+export const POC_FREE_MODE = true;
