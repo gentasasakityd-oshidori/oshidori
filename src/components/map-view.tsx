@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { GoogleMap, useJsApiLoader, MarkerF, InfoWindowF } from "@react-google-maps/api";
 
 type MapShop = {
@@ -12,9 +12,18 @@ type MapShop = {
   longitude: number;
 };
 
+export type MapBounds = {
+  ne: { lat: number; lng: number };
+  sw: { lat: number; lng: number };
+};
+
 type MapViewProps = {
   shops: MapShop[];
   onShopClick?: (slug: string) => void;
+  onBoundsChanged?: (bounds: MapBounds) => void;
+  onMapMoved?: () => void;
+  highlightedSlug?: string | null;
+  height?: string;
 };
 
 const MAP_CONTAINER_STYLE = {
@@ -41,7 +50,22 @@ function loadMapState(): { center: { lat: number; lng: number }; zoom: number } 
   }
 }
 
-export function MapView({ shops, onShopClick }: MapViewProps) {
+/** 番号付きマーカーSVGを生成 */
+function numberedMarkerSvg(num: number, isHighlighted: boolean): string {
+  const bg = isHighlighted ? "#2C3E50" : "#E06A4E";
+  const size = isHighlighted ? 38 : 30;
+  const r = size / 2;
+  const sw = isHighlighted ? 3 : 2;
+  const fs = isHighlighted ? 16 : 13;
+  return "data:image/svg+xml," + encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
+      <circle cx="${r}" cy="${r}" r="${r - sw}" fill="${bg}" stroke="white" stroke-width="${sw}"/>
+      <text x="${r}" y="${r + fs * 0.35}" text-anchor="middle" fill="white" font-size="${fs}" font-weight="700" font-family="Arial,sans-serif">${num}</text>
+    </svg>`
+  );
+}
+
+export function MapView({ shops, onShopClick, onBoundsChanged, onMapMoved, highlightedSlug, height }: MapViewProps) {
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? "";
 
   const { isLoaded, loadError } = useJsApiLoader({
@@ -49,7 +73,13 @@ export function MapView({ shops, onShopClick }: MapViewProps) {
   });
 
   const [selectedShop, setSelectedShop] = useState<MapShop | null>(null);
-  const [map, setMap] = useState<google.maps.Map | null>(null);
+  const [, setMap] = useState<google.maps.Map | null>(null);
+
+  // コールバックのRefを保持（onLoadは一度しか呼ばれないため）
+  const onBoundsChangedRef = useRef(onBoundsChanged);
+  onBoundsChangedRef.current = onBoundsChanged;
+  const onMapMovedRef = useRef(onMapMoved);
+  onMapMovedRef.current = onMapMoved;
 
   const onLoad = useCallback(
     (mapInstance: google.maps.Map) => {
@@ -69,12 +99,31 @@ export function MapView({ shops, onShopClick }: MapViewProps) {
         mapInstance.setZoom(15);
       }
 
-      // ズーム・ドラッグ時に状態を保存
+      // 初回ロード完了フラグ（初回のidle通知を除外するため）
+      let initialized = false;
+      setTimeout(() => { initialized = true; }, 1200);
+
       mapInstance.addListener("idle", () => {
         const c = mapInstance.getCenter();
         const z = mapInstance.getZoom();
         if (c && z !== undefined) {
           saveMapState({ lat: c.lat(), lng: c.lng() }, z);
+        }
+
+        // bounds通知
+        const bounds = mapInstance.getBounds();
+        if (bounds && onBoundsChangedRef.current) {
+          const ne = bounds.getNorthEast();
+          const sw = bounds.getSouthWest();
+          onBoundsChangedRef.current({
+            ne: { lat: ne.lat(), lng: ne.lng() },
+            sw: { lat: sw.lat(), lng: sw.lng() },
+          });
+        }
+
+        // ユーザー操作時のみmapMoved通知
+        if (initialized) {
+          onMapMovedRef.current?.();
         }
       });
     },
@@ -84,6 +133,8 @@ export function MapView({ shops, onShopClick }: MapViewProps) {
   const onUnmount = useCallback(() => {
     setMap(null);
   }, []);
+
+  const containerHeight = height ?? "calc(100vh - 16rem)";
 
   if (!apiKey) {
     return (
@@ -115,7 +166,7 @@ export function MapView({ shops, onShopClick }: MapViewProps) {
   }
 
   return (
-    <div className="h-[calc(100vh-16rem)] min-h-[400px] w-full overflow-hidden rounded-xl border border-gray-200">
+    <div style={{ height: containerHeight, minHeight: "280px" }} className="w-full overflow-hidden rounded-xl border border-gray-200">
       <GoogleMap
         mapContainerStyle={MAP_CONTAINER_STYLE}
         center={TOKYO_CENTER}
@@ -128,6 +179,7 @@ export function MapView({ shops, onShopClick }: MapViewProps) {
           mapTypeControl: false,
           streetViewControl: false,
           fullscreenControl: false,
+          gestureHandling: "greedy",
           styles: [
             {
               featureType: "poi",
@@ -137,48 +189,30 @@ export function MapView({ shops, onShopClick }: MapViewProps) {
           ],
         }}
       >
-        {shops.map((shop) => (
-          <MarkerF
-            key={shop.slug}
-            position={{ lat: shop.latitude, lng: shop.longitude }}
-            onClick={() => setSelectedShop(shop)}
-            label={{
-              text: shop.name.length > 8 ? shop.name.slice(0, 8) + "…" : shop.name,
-              color: "white",
-              fontSize: "11px",
-              fontWeight: "600",
-            }}
-            icon={{
-              path: google.maps.SymbolPath.CIRCLE,
-              scale: 0,
-            }}
-          />
-        ))}
-
-        {/* Custom markers with labels */}
-        {shops.map((shop) => (
-          <MarkerF
-            key={`pin-${shop.slug}`}
-            position={{ lat: shop.latitude, lng: shop.longitude }}
-            onClick={() => setSelectedShop(shop)}
-            icon={{
-              url: "data:image/svg+xml," + encodeURIComponent(`
-                <svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 36 36">
-                  <circle cx="18" cy="18" r="14" fill="#E06A4E" stroke="white" stroke-width="3"/>
-                  <circle cx="18" cy="18" r="5" fill="white"/>
-                </svg>
-              `),
-              scaledSize: new google.maps.Size(36, 36),
-              anchor: new google.maps.Point(18, 18),
-            }}
-          />
-        ))}
+        {/* 番号付きマーカー */}
+        {shops.map((shop, index) => {
+          const isHighlighted = shop.slug === highlightedSlug;
+          const markerSize = isHighlighted ? 38 : 30;
+          return (
+            <MarkerF
+              key={shop.slug}
+              position={{ lat: shop.latitude, lng: shop.longitude }}
+              onClick={() => setSelectedShop(shop)}
+              zIndex={isHighlighted ? 1000 : index}
+              icon={{
+                url: numberedMarkerSvg(index + 1, isHighlighted),
+                scaledSize: new google.maps.Size(markerSize, markerSize),
+                anchor: new google.maps.Point(markerSize / 2, markerSize / 2),
+              }}
+            />
+          );
+        })}
 
         {selectedShop && (
           <InfoWindowF
             position={{ lat: selectedShop.latitude, lng: selectedShop.longitude }}
             onCloseClick={() => setSelectedShop(null)}
-            options={{ pixelOffset: new google.maps.Size(0, -20) }}
+            options={{ pixelOffset: new google.maps.Size(0, -18) }}
           >
             <div style={{ minWidth: 160, fontFamily: "sans-serif", padding: 4 }}>
               <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 4 }}>
