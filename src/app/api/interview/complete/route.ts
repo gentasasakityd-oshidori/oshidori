@@ -19,6 +19,10 @@ import {
   saveProposals,
 } from "@/lib/ai/cm-proposals";
 import { triggerPostInterviewPipeline, markStoryGenerated } from "@/lib/onboarding-pipeline";
+import {
+  analyzeInterviewQuality,
+  analyzeInterviewQualityWithAI,
+} from "@/lib/ai/interview-learning";
 
 export async function POST(request: Request) {
   try {
@@ -179,6 +183,11 @@ async function completeMenuInterview(
   } catch (cmError) {
     console.error("Failed to generate CM proposals:", cmError);
   }
+
+  // v7.0: インタビュー品質分析（ナオの学習ループ、非同期）
+  analyzeInterviewQuality(supabase, interview_id, interviewData.shop_id).catch((err) => {
+    console.error("[学習ループ] インタビュー品質分析エラー:", err);
+  });
 
   return NextResponse.json({
     menu: savedMenu,
@@ -526,6 +535,15 @@ async function completeFullInterview(
       console.error("[Pipeline] Story generated phase update error:", err);
     });
   }
+
+  // v7.0: インタビュー品質分析（ナオの学習ループ）
+  // ルールベース分析 + AI深層分析を非同期で実行
+  Promise.all([
+    analyzeInterviewQuality(supabase, interview_id, interviewData.shop_id),
+    analyzeInterviewQualityWithAI(supabase, interview_id, interviewData.shop_id, transcript),
+  ]).catch((err) => {
+    console.error("[学習ループ] インタビュー品質分析エラー:", err);
+  });
 
   return NextResponse.json({
     story: savedStory,

@@ -6,7 +6,18 @@ export type InterviewType =
   | "menu_addition"
   | "seasonal_menu";
 
+/** v7.0: 初回インタビューフェーズ（メニュー軸×一次情報 軌道修正版） */
 export type InterviewPhase =
+  | "warmup"
+  | "concept"
+  | "recommended_menu"
+  | "story"
+  | "customers"
+  | "closing"
+  | "completed";
+
+/** v6.1以前の旧フェーズ名（後方互換） */
+export type LegacyInterviewPhase =
   | "warmup"
   | "origin"
   | "kodawari"

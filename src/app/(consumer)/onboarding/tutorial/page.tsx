@@ -113,10 +113,10 @@ export default function TutorialPage() {
           <SlideIcon className={`h-12 w-12 ${slide.iconColor}`} />
         </div>
 
-        <h1 className="mt-8 text-center text-2xl font-bold text-[#2C3E50]">
+        <h1 className="text-balance mt-8 text-center text-2xl font-bold text-[#2C3E50]">
           {slide.title}
         </h1>
-        <p className="mt-4 text-center text-base leading-relaxed text-muted-foreground">
+        <p className="text-pretty mt-4 text-center text-base leading-relaxed text-muted-foreground">
           {slide.description}
         </p>
       </div>

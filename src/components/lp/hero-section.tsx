@@ -87,11 +87,11 @@ export function HeroSection({
 
       {/* コンテンツ */}
       <div className="relative z-10 mx-auto max-w-4xl px-6 py-24 text-center md:py-32">
-        <h1 className="font-heading text-3xl font-bold leading-tight tracking-tight text-white drop-shadow-lg md:text-5xl lg:text-6xl">
+        <h1 className="text-balance font-heading text-3xl font-bold leading-tight tracking-tight text-white drop-shadow-lg md:text-5xl lg:text-6xl">
           {headline}
         </h1>
         {subheadline && (
-          <p className="mx-auto mt-6 max-w-2xl text-base leading-relaxed text-white/85 md:text-lg">
+          <p className="text-balance mx-auto mt-6 max-w-2xl text-base leading-relaxed text-white/85 md:text-lg">
             {subheadline}
           </p>
         )}

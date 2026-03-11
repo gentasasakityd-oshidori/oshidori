@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { createChatCompletion } from "@/lib/ai/client";
 import { logApiUsage } from "@/lib/ai/usage-logger";
+import { getInterviewLearningText } from "@/lib/ai/interview-context";
 import {
   buildInterviewSystemPrompt,
   buildMonthlyUpdatePrompt,
@@ -139,14 +140,19 @@ export async function POST(request: Request) {
           shopName: typedShop?.name ?? interviewData.engagement_context.shop_name,
         });
         break;
-      default:
+      default: {
+        // v7.0: ナオの学習データを取得して注入
+        const shopCategory = typedShop?.category ?? interviewData.engagement_context.category;
+        const learningText = await getInterviewLearningText(supabase, shopCategory);
         systemPrompt = buildInterviewSystemPrompt({
           ownerName: typedShop?.owner_name ?? interviewData.engagement_context.owner_name,
           shopName: typedShop?.name ?? interviewData.engagement_context.shop_name,
-          category: typedShop?.category ?? interviewData.engagement_context.category,
+          category: shopCategory,
           engagementContext: interviewData.engagement_context,
+          learningText,
         });
         break;
+      }
     }
 
     // プロバイダー抽象化 API でチャット補完
@@ -207,16 +213,22 @@ export async function POST(request: Request) {
     if (metadata?.should_transition && metadata.next_phase) {
       const phaseMap: Record<string, number> = {
         warmup: 1,
+        // v7.0 フェーズ
+        concept: 2,
+        recommended_menu: 3,
+        story: 4,
+        customers: 5,
+        closing: 6,
+        completed: 7,
+        // v6.1以前（後方互換）
         origin: 2,
         kodawari: 3,
         menu_story: 4,
         regulars: 5,
         future: 6,
-        completed: 7,
         // メニュー追加用フェーズ
         catchup: 1,
         episode: 2,
-        closing: 3,
         // メニュー追加 v6.1 用フェーズ
         background: 1,
         ingredients_methods: 2,

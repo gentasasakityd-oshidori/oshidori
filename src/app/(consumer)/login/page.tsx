@@ -31,6 +31,7 @@ function LoginForm() {
   const [registerNickname, setRegisterNickname] = useState("");
   const [registerEmail, setRegisterEmail] = useState("");
   const [registerPassword, setRegisterPassword] = useState("");
+  const [agreedToTerms, setAgreedToTerms] = useState(false);
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
@@ -145,7 +146,7 @@ function LoginForm() {
             height={44}
             className="mx-auto h-11 w-auto"
           />
-          <p className="mt-3 text-sm text-muted-foreground">
+          <p className="text-pretty mt-3 text-sm text-muted-foreground">
             こだわりの飲食店と出会う。共感で、つながる。
           </p>
         </div>
@@ -318,7 +319,27 @@ function LoginForm() {
                     </div>
                   </div>
 
-                  <Button type="submit" className="w-full" size="lg" disabled={isLoading}>
+                  <div className="flex items-start gap-2">
+                    <input
+                      type="checkbox"
+                      id="agree-terms"
+                      checked={agreedToTerms}
+                      onChange={(e) => setAgreedToTerms(e.target.checked)}
+                      className="mt-1 h-4 w-4 rounded border-gray-300 accent-primary"
+                    />
+                    <label htmlFor="agree-terms" className="text-xs text-muted-foreground leading-relaxed">
+                      <Link href="/terms" className="text-primary hover:underline" target="_blank">
+                        利用規約
+                      </Link>
+                      および
+                      <Link href="/privacy" className="text-primary hover:underline" target="_blank">
+                        プライバシーポリシー
+                      </Link>
+                      に同意します
+                    </label>
+                  </div>
+
+                  <Button type="submit" className="w-full" size="lg" disabled={isLoading || !agreedToTerms}>
                     {isLoading ? (
                       <>
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -328,18 +349,6 @@ function LoginForm() {
                       "アカウントを作成"
                     )}
                   </Button>
-
-                  <p className="text-center text-xs text-muted-foreground">
-                    登録することで
-                    <Link href="/terms" className="text-primary hover:underline">
-                      利用規約
-                    </Link>
-                    と
-                    <Link href="/privacy" className="text-primary hover:underline">
-                      プライバシーポリシー
-                    </Link>
-                    に同意したことになります
-                  </p>
                 </form>
               </TabsContent>
             </Tabs>

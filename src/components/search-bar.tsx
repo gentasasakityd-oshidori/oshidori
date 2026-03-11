@@ -2,14 +2,13 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Search, ArrowRight, Navigation, Settings } from "lucide-react";
+import { Search, ArrowRight, Navigation } from "lucide-react";
 import { useGeolocation } from "@/hooks/use-geolocation";
 
 export function SearchBar() {
   const router = useRouter();
   const [query, setQuery] = useState("");
   const geo = useGeolocation();
-  const [showGuide, setShowGuide] = useState(false);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -22,13 +21,6 @@ export function SearchBar() {
   }
 
   function handleNearMe() {
-    // 拒否済みの場合はガイドを表示
-    if (geo.isDenied) {
-      setShowGuide(true);
-      geo.requestLocation(); // エラー状態を更新
-      return;
-    }
-
     // 既に取得済みなら即遷移
     if (geo.location) {
       router.push(
@@ -37,14 +29,13 @@ export function SearchBar() {
       return;
     }
 
-    // 未取得: ブラウザに許可を求める → 取得後に遷移
+    // ブラウザに許可を求める（ネイティブポップアップが表示される）
     geo.requestLocation();
   }
 
   // location 取得成功時に自動遷移
   useEffect(() => {
     if (geo.location) {
-      setShowGuide(false);
       router.push(
         `/explore?sort=distance&lat=${geo.location.lat}&lng=${geo.location.lng}`,
       );
@@ -72,21 +63,12 @@ export function SearchBar() {
         type="button"
         onClick={handleNearMe}
         disabled={geo.loading}
-        className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-all disabled:opacity-50 ${
-          geo.isDenied
-            ? "border-orange-200 bg-orange-50 text-orange-600 hover:bg-orange-100"
-            : "border-primary/20 bg-primary/5 text-primary hover:bg-primary/10 hover:border-primary/30"
-        }`}
+        className="inline-flex items-center gap-1.5 rounded-full border border-primary/20 bg-primary/5 px-3 py-1.5 text-xs font-medium text-primary transition-all hover:bg-primary/10 hover:border-primary/30 disabled:opacity-50"
       >
         {geo.loading ? (
           <>
             <Navigation className="h-3 w-3 animate-pulse" />
             取得中...
-          </>
-        ) : geo.isDenied ? (
-          <>
-            <Settings className="h-3 w-3" />
-            位置情報の設定を確認
           </>
         ) : (
           <>
@@ -96,33 +78,8 @@ export function SearchBar() {
         )}
       </button>
 
-      {/* 位置情報拒否時の設定変更ガイド */}
-      {showGuide && geo.settingsGuide && (
-        <div className="rounded-lg border border-orange-200 bg-orange-50 p-3">
-          <div className="flex items-start justify-between gap-2">
-            <div>
-              <p className="text-xs font-medium text-orange-600 mb-1">
-                位置情報の利用が拒否されています
-              </p>
-              <p className="text-[11px] leading-relaxed text-gray-700">
-                <Settings className="inline h-3 w-3 mr-1 text-orange-500 -mt-0.5" />
-                {geo.settingsGuide}
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => setShowGuide(false)}
-              className="shrink-0 text-gray-400 hover:text-gray-600 text-xs"
-              aria-label="閉じる"
-            >
-              ✕
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* エラー表示（拒否以外: タイムアウトなど） */}
-      {geo.error && !geo.isDenied && (
+      {/* エラー表示 */}
+      {geo.error && (
         <p className="text-[11px] text-orange-600 ml-1">{geo.error}</p>
       )}
     </div>

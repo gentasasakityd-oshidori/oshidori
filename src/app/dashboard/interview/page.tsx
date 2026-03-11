@@ -44,11 +44,11 @@ type Message = {
 type InterviewPhase =
   | "not_started"
   | "warmup"
-  | "origin"
-  | "kodawari"
-  | "menu_story"
-  | "regulars"
-  | "future"
+  | "concept"
+  | "recommended_menu"
+  | "story"
+  | "customers"
+  | "closing"
   | "completed";
 
 /** インタビュー種別 */
@@ -68,37 +68,37 @@ const INTERVIEW_TYPES: { id: InterviewType; label: string; desc: string; duratio
   { id: "seasonal_menu", label: "季節メニューの追加", desc: "新しい季節メニューについてお話しください", duration: "約10分", icon: CalendarPlus },
   { id: "menu_addition", label: "メニューの追加", desc: "新しいメニューのストーリーを作りましょう", duration: "約10分", icon: PlusCircle },
   { id: "monthly_update", label: "月次アップデート", desc: "最近のお店の近況をお聞かせください", duration: "約15分", icon: RefreshCw },
-  { id: "initial", label: "初回インタビューをやり直す", desc: "フルバージョンのインタビューを最初から", duration: "約30分", icon: Sparkles },
+  { id: "initial", label: "初回インタビューをやり直す", desc: "フルバージョンのインタビューを最初から", duration: "約50分", icon: Sparkles },
 ];
 
 const PHASE_LABELS: Record<InterviewPhase, string> = {
   not_started: "開始前",
   warmup: "ウォームアップ",
-  origin: "原点の物語",
-  kodawari: "こだわりの深層",
-  menu_story: "食べてほしい一品",
-  regulars: "常連さんとの関係",
-  future: "未来への想い",
+  concept: "お店のコンセプト",
+  recommended_menu: "推しメニュー",
+  story: "店主のストーリー",
+  customers: "お客さんとの関係",
+  closing: "クロージング",
   completed: "インタビュー完了",
 };
 
-/** 各フェーズの推定所要時間（分）── v6.1: 全体30分 */
+/** 各フェーズの推定所要時間（分）── v7.0: 全体50分 */
 const PHASE_ESTIMATED_MINUTES: Record<string, number> = {
-  warmup: 3,
-  origin: 8,
-  kodawari: 8,
-  menu_story: 5,
-  regulars: 3,
-  future: 3,
+  warmup: 5,
+  concept: 10,
+  recommended_menu: 15,
+  story: 10,
+  customers: 5,
+  closing: 5,
 };
 
 const PHASE_ORDER: InterviewPhase[] = [
   "warmup",
-  "origin",
-  "kodawari",
-  "menu_story",
-  "regulars",
-  "future",
+  "concept",
+  "recommended_menu",
+  "story",
+  "customers",
+  "closing",
 ];
 
 /** @deprecated 旧キー。移行のためクリア用に残す */
@@ -746,32 +746,26 @@ export default function InterviewPage() {
   if (step === "prep_check") {
     const PREP_ITEMS = [
       {
-        id: "origin",
-        label: "お店を始めたきっかけ",
-        hint: "なぜこの道に？ 何がきっかけで飲食の世界へ？",
-        icon: <Heart className="h-4 w-4 text-rose-500" />,
-      },
-      {
-        id: "kodawari",
-        label: "食材・料理へのこだわり",
-        hint: "仕入れ先、調理法、味付けなど、大切にしていること",
-        icon: <UtensilsCrossed className="h-4 w-4 text-amber-600" />,
-      },
-      {
-        id: "signature",
-        label: "看板メニュー・おすすめ",
-        hint: "一番食べてほしい一品、その料理にまつわるエピソード",
+        id: "concept",
+        label: "お店のコンセプト",
+        hint: "何屋で、何が推しで、誰に来てほしいか",
         icon: <Sparkles className="h-4 w-4 text-primary" />,
       },
       {
-        id: "atmosphere",
-        label: "お店の雰囲気・空間づくり",
-        hint: "内装、BGM、席配置…どんな空間にしたいか",
-        icon: <BookOpen className="h-4 w-4 text-blue-500" />,
+        id: "recommended_menu",
+        label: "推しメニュー3品",
+        hint: "自信を持って推したいメニュー、そのこだわりと食べ方のコツ",
+        icon: <UtensilsCrossed className="h-4 w-4 text-amber-600" />,
+      },
+      {
+        id: "story",
+        label: "お店を始めたきっかけ",
+        hint: "なぜこの道に？ 修行時代の話、開業の決意",
+        icon: <Heart className="h-4 w-4 text-rose-500" />,
       },
       {
         id: "customers",
-        label: "お客さまとの思い出",
+        label: "お客さんとの思い出",
         hint: "心に残る常連さんとのエピソード、嬉しかった言葉",
         icon: <MessageSquare className="h-4 w-4 text-green-600" />,
       },

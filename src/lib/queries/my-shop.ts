@@ -15,13 +15,17 @@ export async function getMyShopId(
   supabase: SupabaseClient,
   userId: string
 ): Promise<string | null> {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("shops")
     .select("id")
     .eq("owner_id", userId)
     .limit(1)
-    .single();
+    .maybeSingle();
 
+  if (error) {
+    console.error("getMyShopId error:", error);
+    return null;
+  }
   if (!data) return null;
   return (data as { id: string }).id;
 }
@@ -39,7 +43,7 @@ export async function verifyShopOwnership(
     .select("id")
     .eq("id", shopId)
     .eq("owner_id", userId)
-    .single();
+    .maybeSingle();
 
   return !!data;
 }

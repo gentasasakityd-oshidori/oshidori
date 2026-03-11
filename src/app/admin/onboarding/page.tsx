@@ -274,6 +274,16 @@ export default function AdminOnboardingPage() {
 
                     {/* アクションボタン */}
                     <div className="flex items-center gap-2 shrink-0">
+                      {shop.onboarding_phase === "application_pending" && (
+                        <Button
+                          size="sm"
+                          onClick={() => handleAction(shop.id, "approve")}
+                          disabled={actionLoading === shop.id}
+                        >
+                          <CheckCircle2 className="h-3 w-3 mr-1" />
+                          承認
+                        </Button>
+                      )}
                       {shop.onboarding_phase === "approved" && (
                         <Button
                           size="sm"

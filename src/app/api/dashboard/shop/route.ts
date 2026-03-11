@@ -148,6 +148,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const {
       name, owner_name, owner_real_name,
+      owner_real_name_sei, owner_real_name_mei,
       category, description,
       // 構造化住所（addressはレガシー、address_*が新形式）
       address, address_prefecture, address_city, address_street, address_building,
@@ -158,6 +159,8 @@ export async function POST(request: NextRequest) {
       // 外部URL（フロントからは homepage_url / website_url どちらでも受付）
       tabelog_url, gmb_url, website_url, homepage_url,
       // homepage_url を website_url に統合
+      // SNS URL
+      instagram_url, x_url, line_url,
       // エリア（最寄り駅）
       area,
       // ジオコーディング結果（フロントから渡される）
@@ -203,10 +206,18 @@ export async function POST(request: NextRequest) {
     if (!validateUrl(gmb_url)) errors.push("GoogleマップURLの形式が不正です");
     const resolvedWebsiteUrl = homepage_url || website_url;
     if (!validateUrl(resolvedWebsiteUrl)) errors.push("ホームページURLの形式が不正です");
+    if (!validateUrl(instagram_url)) errors.push("Instagram URLの形式が不正です");
+    if (!validateUrl(x_url)) errors.push("X(Twitter) URLの形式が不正です");
+    if (!validateUrl(line_url)) errors.push("LINE URLの形式が不正です");
 
     if (errors.length > 0) {
       return NextResponse.json({ error: errors.join("、") }, { status: 400 });
     }
+
+    // 姓名を結合してowner_real_nameにも保存（後方互換）
+    const resolvedRealName = owner_real_name_sei && owner_real_name_mei
+      ? `${owner_real_name_sei.trim()} ${owner_real_name_mei.trim()}`
+      : owner_real_name_sei?.trim() || owner_real_name?.trim() || null;
 
     // 最寄り駅をareaに使う（後方互換）
     const areaValue = area || nearest_station || address_city?.trim() || "";
@@ -227,7 +238,9 @@ export async function POST(request: NextRequest) {
         slug,
         name: name.trim(),
         owner_name: owner_name.trim(),
-        owner_real_name: owner_real_name?.trim() || null,
+        owner_real_name: resolvedRealName,
+        owner_real_name_sei: owner_real_name_sei?.trim() || null,
+        owner_real_name_mei: owner_real_name_mei?.trim() || null,
         category,
         area: areaValue,
         description: description?.trim() || null,
@@ -242,8 +255,12 @@ export async function POST(request: NextRequest) {
         tabelog_url: tabelog_url?.trim() || null,
         gmb_url: gmb_url?.trim() || null,
         website_url: resolvedWebsiteUrl?.trim() || null,
+        instagram_url: instagram_url?.trim() || null,
+        x_url: x_url?.trim() || null,
+        line_url: line_url?.trim() || null,
         owner_id: user.id,
         is_published: false,
+        onboarding_phase: "application_pending",
       } as never)
       .select()
       .single();
@@ -373,6 +390,18 @@ export async function PATCH(request: NextRequest) {
       delete updates.homepage_url;
     }
     if ("website_url" in updates && !validateUrl(updates.website_url)) errors.push("ホームページURLの形式が不正です");
+    if ("instagram_url" in updates && !validateUrl(updates.instagram_url)) errors.push("Instagram URLの形式が不正です");
+    if ("x_url" in updates && !validateUrl(updates.x_url)) errors.push("X(Twitter) URLの形式が不正です");
+    if ("line_url" in updates && !validateUrl(updates.line_url)) errors.push("LINE URLの形式が不正です");
+
+    // 姓名分割: owner_real_name_sei / mei が渡された場合、owner_real_name も更新
+    if ("owner_real_name_sei" in updates || "owner_real_name_mei" in updates) {
+      const sei = updates.owner_real_name_sei?.trim() || "";
+      const mei = updates.owner_real_name_mei?.trim() || "";
+      if (sei || mei) {
+        updates.owner_real_name = [sei, mei].filter(Boolean).join(" ");
+      }
+    }
 
     if (errors.length > 0) {
       return NextResponse.json({ error: errors.join("、") }, { status: 400 });

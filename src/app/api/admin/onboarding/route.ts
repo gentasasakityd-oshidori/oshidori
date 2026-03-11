@@ -117,12 +117,14 @@ export async function GET(request: NextRequest) {
       const shopAssignments = ((assignments || []) as Array<{ shop_id: string; interviewer_id: string; status: string; scheduled_date: string | null }>)
         .filter((a) => a.shop_id === shop.id);
 
+      const normalizedPhase = shop.onboarding_phase || "approved";
       return {
         ...shop,
+        onboarding_phase: normalizedPhase,
         latestResearch: reports[0] ?? null,
         latestDesignDoc: docs[0] ?? null,
         assignment: shopAssignments[0] ?? null,
-        needsAction: ACTION_NEEDED_PHASES.includes(shop.onboarding_phase),
+        needsAction: ACTION_NEEDED_PHASES.includes(normalizedPhase),
       };
     });
 

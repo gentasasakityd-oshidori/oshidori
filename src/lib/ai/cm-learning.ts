@@ -1,13 +1,14 @@
 /**
- * AI CM 学習メカニズム（ピボット対応）
+ * AI CM 学習メカニズム（v7.0 学習ループ強化版）
  *
  * AI CMはモデル自体が学習するのではなく、蓄積された行動データを
  * プロンプトに動的注入することで精度が向上する。
  *
- * 蓄積する3種のデータ:
+ * 蓄積する4種のデータ:
  * ① アクションと結果の紐付け
  * ② 店主ごとの反応パターン
  * ③ タイミングと効果の相関
+ * ④ 提案accept/dismiss傾向分析（v7.0追加）
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -54,6 +55,8 @@ export interface CMContext {
     category: string;
     insights: string[];
   };
+  /** v7.0: 提案accept/dismiss傾向分析 */
+  proposalFeedback?: ProposalFeedbackStats | null;
 }
 
 // ─── CM Context Builder ───
@@ -67,16 +70,19 @@ export async function buildCMContext(
   supabase: SupabaseClient,
   shopId: string,
 ): Promise<CMContext> {
-  const [actionLogs, ownerProfile, timingStats] = await Promise.all([
+  const [actionLogs, ownerProfile, timingStats, proposalFeedback] = await Promise.all([
     getRecentActionResults(supabase, shopId),
     getOwnerProfile(supabase, shopId),
     getTimingStats(supabase, shopId),
+    // v7.0: 提案フィードバック分析を追加
+    getProposalFeedbackStats(supabase, shopId),
   ]);
 
   return {
     actionHistory: actionLogs,
     ownerProfile,
     timingStats,
+    proposalFeedback,
   };
 }
 
@@ -333,6 +339,19 @@ export async function generateDataDrivenProposal(
 - 効果が高い時間帯: ${cmContext.timingStats.bestHours.map((h) => `${h}時`).join("、")}`;
   }
 
+  // 動的部分④: 提案フィードバック学習（v7.0）
+  if (cmContext.proposalFeedback) {
+    const pf = cmContext.proposalFeedback;
+    contextPrompt += `\n\n## 提案フィードバック学習
+- この店主の提案承認率: ${pf.acceptRate}%`;
+    if (pf.acceptedTypes.length > 0) {
+      contextPrompt += `\n- 承認されやすい提案: ${pf.acceptedTypes.join("、")}（これらを優先して提案）`;
+    }
+    if (pf.dismissedTypes.length > 0) {
+      contextPrompt += `\n- 却下されやすい提案: ${pf.dismissedTypes.join("、")}（これらは避けるか改善して提案）`;
+    }
+  }
+
   try {
     const result = await createChatCompletion({
       messages: [
@@ -413,5 +432,116 @@ export function formatCMContextForPrompt(context: CMContext): string {
 - 避けるべき曜日: ${context.timingStats.worstDays.join("、")}`);
   }
 
+  // v7.0: 提案accept/dismiss傾向
+  if (context.proposalFeedback) {
+    const pf = context.proposalFeedback;
+    sections.push(`### 提案フィードバック学習
+- 承認率: ${pf.acceptRate}%（${pf.totalProposals}件中）
+- 承認されやすい提案: ${pf.acceptedTypes.join("、") || "データ不足"}
+- 却下されやすい提案: ${pf.dismissedTypes.join("、") || "データ不足"}
+- 平均応答時間: ${pf.avgResponseHours}時間`);
+  }
+
   return sections.join("\n\n");
+}
+
+// ─── v7.0 提案フィードバック分析 ───
+
+/** 提案フィードバック分析結果 */
+export interface ProposalFeedbackStats {
+  /** 総提案数 */
+  totalProposals: number;
+  /** 承認率（%） */
+  acceptRate: number;
+  /** 承認されやすい提案タイプ */
+  acceptedTypes: string[];
+  /** 却下されやすい提案タイプ */
+  dismissedTypes: string[];
+  /** 平均応答時間（時間） */
+  avgResponseHours: number;
+  /** 提案タイプ別の承認率 */
+  typeAcceptRates: Record<string, number>;
+}
+
+/**
+ * 店舗の提案フィードバック統計を取得
+ * accept/dismiss パターンから提案精度を向上させるデータを生成
+ */
+export async function getProposalFeedbackStats(
+  supabase: SupabaseClient,
+  shopId: string,
+): Promise<ProposalFeedbackStats | null> {
+  const { data } = await supabase
+    .from("ai_cm_proposals")
+    .select("proposal_type, status, created_at, accepted_at, dismissed_at")
+    .eq("shop_id", shopId)
+    .in("status", ["accepted", "dismissed"])
+    .order("created_at", { ascending: false })
+    .limit(100);
+
+  if (!data || data.length < 3) return null; // 最低3件のデータが必要
+
+  const proposals = data as {
+    proposal_type: string;
+    status: string;
+    created_at: string;
+    accepted_at: string | null;
+    dismissed_at: string | null;
+  }[];
+
+  const totalProposals = proposals.length;
+  const accepted = proposals.filter((p) => p.status === "accepted");
+  const dismissed = proposals.filter((p) => p.status === "dismissed");
+  const acceptRate = Math.round((accepted.length / totalProposals) * 100);
+
+  // タイプ別の承認率
+  const typeStats: Record<string, { accepted: number; total: number }> = {};
+  for (const p of proposals) {
+    if (!typeStats[p.proposal_type]) {
+      typeStats[p.proposal_type] = { accepted: 0, total: 0 };
+    }
+    typeStats[p.proposal_type].total++;
+    if (p.status === "accepted") {
+      typeStats[p.proposal_type].accepted++;
+    }
+  }
+
+  const typeAcceptRates: Record<string, number> = {};
+  for (const [type, stats] of Object.entries(typeStats)) {
+    typeAcceptRates[type] = Math.round((stats.accepted / stats.total) * 100);
+  }
+
+  // 承認されやすいタイプ（承認率60%以上）
+  const acceptedTypes = Object.entries(typeAcceptRates)
+    .filter(([, rate]) => rate >= 60)
+    .sort(([, a], [, b]) => b - a)
+    .map(([type]) => type);
+
+  // 却下されやすいタイプ（承認率40%以下）
+  const dismissedTypes = Object.entries(typeAcceptRates)
+    .filter(([, rate]) => rate <= 40)
+    .sort(([, a], [, b]) => a - b)
+    .map(([type]) => type);
+
+  // 平均応答時間
+  const responseTimes = proposals
+    .map((p) => {
+      const actedAt = p.accepted_at || p.dismissed_at;
+      if (!actedAt) return null;
+      return (new Date(actedAt).getTime() - new Date(p.created_at).getTime()) / (1000 * 60 * 60);
+    })
+    .filter((t): t is number => t !== null);
+
+  const avgResponseHours = responseTimes.length > 0
+    ? Math.round(responseTimes.reduce((a, b) => a + b, 0) / responseTimes.length * 10) / 10
+    : 0;
+
+  return {
+    totalProposals,
+    acceptRate,
+    acceptedTypes,
+    dismissedTypes,
+    avgResponseHours,
+    typeAcceptRates,
+  };
 }

@@ -102,7 +102,7 @@ export async function updateSession(request: NextRequest) {
   supabaseResponse.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
   supabaseResponse.headers.set(
     "Permissions-Policy",
-    "camera=(), microphone=(self), geolocation=()"
+    "camera=(), microphone=(self), geolocation=(self)"
   );
 
   return supabaseResponse;

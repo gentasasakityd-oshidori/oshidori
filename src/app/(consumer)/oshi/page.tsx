@@ -328,8 +328,8 @@ export default function OshiPage() {
                 <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-[#E06A4E]/10">
                   <Camera className="h-6 w-6 text-[#E06A4E]" />
                 </div>
-                <h3 className="text-base font-bold text-[#2C3E50]">まだ記録がありません</h3>
-                <p className="mt-1 text-sm text-muted-foreground">
+                <h3 className="text-balance text-base font-bold text-[#2C3E50]">まだ記録がありません</h3>
+                <p className="text-pretty mt-1 text-sm text-muted-foreground">
                   推しのお店に行ったら、写真やひとことを記録してみましょう
                 </p>
                 <Button className="mt-4 gap-1.5 bg-[#E06A4E] hover:bg-[#d0593d]" asChild>
@@ -479,10 +479,10 @@ export default function OshiPage() {
           {oshiShops.length === 0 ? (
             <div className="rounded-xl border border-dashed border-primary/20 bg-warm/30 p-8 text-center">
               <Heart className="mx-auto h-12 w-12 text-primary/30" />
-              <p className="mt-4 text-base font-medium text-[#2C3E50]">
+              <p className="text-balance mt-4 text-base font-medium text-[#2C3E50]">
                 まだ推し店がありません
               </p>
-              <p className="mt-2 text-sm text-muted-foreground">
+              <p className="text-pretty mt-2 text-sm text-muted-foreground">
                 ストーリーを読んで共感したら「推す」ボタンで推そう
               </p>
               <div className="mt-5 flex flex-col items-center gap-2 sm:flex-row sm:justify-center">

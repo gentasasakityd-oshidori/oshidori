@@ -1,7 +1,7 @@
 /**
- * データ循環モデル: インタビューコンテキスト構築（v6.1 Phase 3）
+ * データ循環モデル: インタビューコンテキスト構築（v7.0）
  *
- * 5つのデータソースからインタビューコンテキストを構築し、
+ * 6つのデータソースからインタビューコンテキストを構築し、
  * AIインタビューの質を継続的に向上させる。
  *
  * データソース:
@@ -10,10 +10,16 @@
  * 3. oshi_shops — 推し登録数・成長トレンド
  * 4. empathy_taps — 感情タグの分布
  * 5. ai_interviews — 過去インタビューからのkey_quotes・カバー済みトピック
+ * 6. interview_quality_metrics — ナオの学習データ（v7.0追加）
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { InterviewContext, EngagementContext } from "@/types/ai";
+import {
+  buildInterviewLearningContext,
+  formatLearningContextForPrompt,
+  type InterviewLearningContext,
+} from "@/lib/ai/interview-learning";
 
 /**
  * 店舗のインタビューコンテキストを構築する
@@ -408,4 +414,39 @@ export function formatContextForPrompt(context: InterviewContext): string {
 ただし、データの数字を直接言及することは避けてください（「来店データによると…」等は NG）。
 
 ${sections.join("\n\n")}`;
+}
+
+// ─── v7.0 インタビュー学習コンテキスト ───
+
+/**
+ * ナオの学習コンテキストを取得し、プロンプト注入用テキストを生成する
+ * インタビュー品質メトリクスの蓄積データから、業態別の最適アプローチを学習
+ */
+export async function getInterviewLearningText(
+  supabase: SupabaseClient,
+  category: string,
+): Promise<string> {
+  try {
+    const learningContext = await buildInterviewLearningContext(supabase, category);
+    return formatLearningContextForPrompt(learningContext);
+  } catch (error) {
+    // 学習データ取得失敗は非致命的（テーブルが未作成の場合等）
+    console.error("学習コンテキスト取得エラー（非致命的）:", error);
+    return "";
+  }
+}
+
+/**
+ * ナオの学習コンテキストオブジェクトを取得する（分析用）
+ */
+export async function getInterviewLearningContext(
+  supabase: SupabaseClient,
+  category: string,
+): Promise<InterviewLearningContext | null> {
+  try {
+    return await buildInterviewLearningContext(supabase, category);
+  } catch (error) {
+    console.error("学習コンテキスト取得エラー:", error);
+    return null;
+  }
 }

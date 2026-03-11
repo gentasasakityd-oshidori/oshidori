@@ -29,8 +29,8 @@ export default async function StoriesPage() {
     <section className="px-4 py-12">
       <div className="mx-auto max-w-4xl">
         <div className="text-center">
-          <h1 className="text-2xl font-bold">ストーリー</h1>
-          <p className="mt-2 text-sm text-muted-foreground">
+          <h1 className="text-balance text-2xl font-bold">ストーリー</h1>
+          <p className="text-pretty mt-2 text-sm text-muted-foreground">
             飲食店オーナーの想いとこだわりが詰まったストーリー
           </p>
         </div>

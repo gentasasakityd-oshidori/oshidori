@@ -178,6 +178,25 @@ export async function PATCH(
       });
     }
 
+    // 店舗登録の承認 → パイプライン自動実行
+    if (action === "approve") {
+      const { error } = await db
+        .from("shops")
+        .update({ onboarding_phase: "approved" })
+        .eq("id", shopId);
+
+      if (error) {
+        return NextResponse.json({ error: "承認に失敗しました" }, { status: 500 });
+      }
+
+      // 承認後パイプラインを fire-and-forget で実行
+      triggerPostApprovalPipeline(supabase, shopId).catch((err) => {
+        console.error("[Pipeline] Post-approval pipeline error:", err);
+      });
+
+      return NextResponse.json({ success: true, phase: "approved", message: "承認しました。事前調査を開始します" });
+    }
+
     // パイプライン再実行
     if (action === "retry_pipeline") {
       triggerPostApprovalPipeline(supabase, shopId).catch((err) => {

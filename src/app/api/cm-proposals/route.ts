@@ -1,12 +1,13 @@
 /**
- * AI CM提案 APIルート（v6.1 Phase 4）
+ * AI CM提案 APIルート（v7.0 学習ループ対応）
  *
  * GET  /api/cm-proposals — 店舗の提案一覧を取得
- * PATCH /api/cm-proposals — 提案のステータスを更新（accept/dismiss）
+ * PATCH /api/cm-proposals — 提案のステータスを更新（accept/dismiss）+ 学習データ記録
  */
 
 import { NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { logCMAction } from "@/lib/ai/cm-learning";
 
 export async function GET(request: Request) {
   try {
@@ -180,6 +181,32 @@ export async function PATCH(request: Request) {
       console.error("Failed to update CM proposal:", updateError);
       return NextResponse.json({ error: "Failed to update proposal" }, { status: 500 });
     }
+
+    // v7.0: CM学習ループ — accept/dismiss を行動データとして記録
+    // この蓄積データが将来の提案精度を向上させる
+    const updatedProposal = updated as {
+      id: string;
+      shop_id: string;
+      proposal_type: string;
+      title: string;
+      trigger_source: string;
+    };
+    logCMAction(supabase, updatedProposal.shop_id, {
+      actionType: `proposal_${action}`,
+      actionDetail: {
+        proposal_id: updatedProposal.id,
+        proposal_type: updatedProposal.proposal_type,
+        title: updatedProposal.title,
+        trigger_source: updatedProposal.trigger_source,
+      },
+      resultType: action === "accept" ? "positive" : "negative",
+      resultValue: action === "accept" ? 1.0 : 0.0,
+      resultDetail: {
+        response_time_ms: Date.now() - new Date((updated as { created_at: string }).created_at).getTime(),
+      },
+    }).catch((err) => {
+      console.error("[CM学習ループ] アクション記録エラー:", err);
+    });
 
     return NextResponse.json({ proposal: updated });
   } catch (error) {
