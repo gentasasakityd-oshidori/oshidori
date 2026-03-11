@@ -182,6 +182,13 @@ export async function PATCH(request: Request) {
       // 事前調査 → インタビュー設計書生成 を自動チェーン
       if (newShop) {
         const shopId = (newShop as { id: string }).id;
+
+        // パイプライン開始前にフェーズを即時更新（"approved"のまま停止するバグを防止）
+        await db
+          .from("shops")
+          .update({ onboarding_phase: "pre_research_running" })
+          .eq("id", shopId);
+
         triggerPostApprovalPipeline(supabase, shopId).catch((err) => {
           console.error("[Pipeline] Background pipeline error:", err);
         });

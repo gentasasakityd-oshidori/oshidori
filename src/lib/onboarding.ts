@@ -8,6 +8,7 @@
 export const ONBOARDING_PHASES = [
   "application_pending",
   "approved",
+  "pipeline_error",
   "pre_research_running",
   "pre_research_done",
   "design_doc_generating",
@@ -53,6 +54,15 @@ export const PHASE_METADATA: Record<OnboardingPhase, PhaseMetadata> = {
     textColor: "text-blue-700",
     actor: "system",
     needsAction: false,
+  },
+  pipeline_error: {
+    label: "パイプラインエラー",
+    shortLabel: "エラー",
+    description: "自動処理でエラーが発生しました。再実行してください",
+    color: "bg-red-100",
+    textColor: "text-red-700",
+    actor: "cs",
+    needsAction: true,
   },
   pre_research_running: {
     label: "事前調査中",

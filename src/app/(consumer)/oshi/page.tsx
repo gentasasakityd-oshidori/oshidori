@@ -35,9 +35,10 @@ import { ShareButtons } from "@/components/share-buttons";
 import { FanLetterModal } from "@/app/(consumer)/diary/fan-letter-modal";
 import type { Shop, Story, VisitRecordWithShop } from "@/types/database";
 import dynamic from "next/dynamic";
-import { MapPin, List } from "lucide-react";
+import { MapPin, List, Rss } from "lucide-react";
 
 const MapView = dynamic(() => import("@/components/map-view").then(m => m.MapView), { ssr: false });
+import { OshiFeed } from "@/components/oshi/oshi-feed";
 
 type OshiShopWithRelations = Shop & {
   stories: Story[];
@@ -80,12 +81,12 @@ function getEmpathyTag(tagId: string) {
   return EMPATHY_TAGS.find((t) => t.id === tagId);
 }
 
-type ActiveTab = "oshi" | "diary";
+type ActiveTab = "feed" | "oshi" | "diary";
 
 export default function OshiPage() {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<ActiveTab>("oshi");
+  const [activeTab, setActiveTab] = useState<ActiveTab>("feed");
   const [nickname, setNickname] = useState("");
   const [oshiShops, setOshiShops] = useState<OshiShopWithRelations[]>([]);
   const [empathyHistory, setEmpathyHistory] = useState<EmpathyHistoryItem[]>([]);
@@ -269,6 +270,22 @@ export default function OshiPage() {
           {/* タブ切り替え */}
           <div className="mt-4 flex border-b border-gray-200">
             <button
+              onClick={() => setActiveTab("feed")}
+              className={`flex-1 pb-2.5 text-sm font-medium text-center transition-colors relative ${
+                activeTab === "feed"
+                  ? "text-[#E06A4E]"
+                  : "text-gray-400 hover:text-gray-600"
+              }`}
+            >
+              <span className="flex items-center justify-center gap-1.5">
+                <Rss className="h-3.5 w-3.5" />
+                フィード
+              </span>
+              {activeTab === "feed" && (
+                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#E06A4E] rounded-full" />
+              )}
+            </button>
+            <button
               onClick={() => setActiveTab("oshi")}
               className={`flex-1 pb-2.5 text-sm font-medium text-center transition-colors relative ${
                 activeTab === "oshi"
@@ -308,6 +325,15 @@ export default function OshiPage() {
           </div>
         </div>
       </section>
+
+      {/* フィードタブ */}
+      {activeTab === "feed" && (
+        <section className="px-4 py-6 pb-24">
+          <div className="mx-auto max-w-3xl">
+            <OshiFeed />
+          </div>
+        </section>
+      )}
 
       {/* ダイアリータブ */}
       {activeTab === "diary" && (

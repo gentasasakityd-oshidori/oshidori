@@ -3,7 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter, usePathname } from "next/navigation";
-import { Search, Heart, Menu, X, LogOut, User } from "lucide-react";
+import { Search, Heart, Menu, X, LogOut, User, Store } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet";
 import {
@@ -31,6 +31,7 @@ export function Header({ initialUser = null, initialNickname = null }: HeaderPro
     initialUser ? ({ id: initialUser.id, email: initialUser.email } as SupabaseUser) : null
   );
   const [nickname, setNickname] = useState<string | null>(initialNickname);
+  const [userRole, setUserRole] = useState<string | null>(null);
 
   /** /home#forecast のような同一ページ内ハッシュリンクを処理 */
   const handleHashNavigation = useCallback(
@@ -57,12 +58,13 @@ export function Header({ initialUser = null, initialNickname = null }: HeaderPro
       if (user) {
         supabase
           .from("users")
-          .select("nickname")
+          .select("nickname, role")
           .eq("id", user.id)
           .single()
           .then(({ data }) => {
-            const d = data as { nickname: string } | null;
+            const d = data as { nickname: string; role: string } | null;
             setNickname(d?.nickname ?? null);
+            setUserRole(d?.role ?? null);
           });
       }
     });
@@ -75,15 +77,17 @@ export function Header({ initialUser = null, initialNickname = null }: HeaderPro
       if (session?.user) {
         supabase
           .from("users")
-          .select("nickname")
+          .select("nickname, role")
           .eq("id", session.user.id)
           .single()
           .then(({ data }) => {
-            const d = data as { nickname: string } | null;
+            const d = data as { nickname: string; role: string } | null;
             setNickname(d?.nickname ?? null);
+            setUserRole(d?.role ?? null);
           });
       } else {
         setNickname(null);
+        setUserRole(null);
       }
     });
 
@@ -95,6 +99,7 @@ export function Header({ initialUser = null, initialNickname = null }: HeaderPro
     await supabase.auth.signOut();
     setUser(null);
     setNickname(null);
+    setUserRole(null);
     router.push("/home");
     router.refresh();
   }
@@ -173,6 +178,14 @@ export function Header({ initialUser = null, initialNickname = null }: HeaderPro
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-48">
+                {userRole === "shop_owner" && (
+                  <DropdownMenuItem asChild>
+                    <Link href="/dashboard" className="cursor-pointer">
+                      <Store className="mr-2 h-4 w-4" />
+                      店舗管理
+                    </Link>
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuItem asChild>
                   <Link href="/mypage" className="cursor-pointer">
                     <Heart className="mr-2 h-4 w-4" />
@@ -251,6 +264,16 @@ export function Header({ initialUser = null, initialNickname = null }: HeaderPro
                     <p className="text-sm text-muted-foreground">
                       ログイン中: {nickname ?? "ユーザー"}
                     </p>
+                    {userRole === "shop_owner" && (
+                      <Link
+                        href="/dashboard"
+                        className="flex items-center gap-2 rounded-lg bg-primary/10 px-3 py-2 text-sm font-medium text-primary transition-colors hover:bg-primary/20"
+                        onClick={() => setIsOpen(false)}
+                      >
+                        <Store className="h-4 w-4" />
+                        店舗管理へ
+                      </Link>
+                    )}
                     <Button
                       variant="outline"
                       className="w-full"

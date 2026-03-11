@@ -180,9 +180,10 @@ export async function PATCH(
 
     // 店舗登録の承認 → パイプライン自動実行
     if (action === "approve") {
+      // 即座に pre_research_running に更新（"approved"のまま停止するバグを防止）
       const { error } = await db
         .from("shops")
-        .update({ onboarding_phase: "approved" })
+        .update({ onboarding_phase: "pre_research_running" })
         .eq("id", shopId);
 
       if (error) {
@@ -194,11 +195,17 @@ export async function PATCH(
         console.error("[Pipeline] Post-approval pipeline error:", err);
       });
 
-      return NextResponse.json({ success: true, phase: "approved", message: "承認しました。事前調査を開始します" });
+      return NextResponse.json({ success: true, phase: "pre_research_running", message: "承認しました。事前調査を開始します" });
     }
 
-    // パイプライン再実行
+    // パイプライン再実行（pipeline_error や approved からの復帰）
     if (action === "retry_pipeline") {
+      // 即座に pre_research_running に更新
+      await db
+        .from("shops")
+        .update({ onboarding_phase: "pre_research_running" })
+        .eq("id", shopId);
+
       triggerPostApprovalPipeline(supabase, shopId).catch((err) => {
         console.error("[Pipeline] Retry error:", err);
       });

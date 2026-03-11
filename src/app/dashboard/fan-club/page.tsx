@@ -25,6 +25,8 @@ import type { FanClubTemplateKey } from "@/lib/constants";
 import { Users } from "lucide-react";
 import { toast } from "sonner";
 import Link from "next/link";
+import { FanClubBenefitTracker } from "@/components/dashboard/fan-club-benefit-tracker";
+import { FanClubAiAdvisor } from "@/components/dashboard/fan-club-ai-advisor";
 
 // ────────────────────────────────────────────
 // 型定義
@@ -40,6 +42,8 @@ type FanClubPlan = {
   is_active: boolean;
   created_at: string;
   updated_at: string;
+  join_conditions?: Record<string, unknown>;
+  calendar_config?: Record<string, unknown>;
 };
 
 type FormData = {
@@ -890,6 +894,12 @@ export default function FanClubPage() {
               </div>
             </CardContent>
           </Card>
+
+          {/* 特典トラッカー */}
+          <FanClubBenefitTracker planId={plan.id} />
+
+          {/* AIアドバイザー */}
+          <FanClubAiAdvisor shopId={plan.shop_id} />
         </>
       )}
 

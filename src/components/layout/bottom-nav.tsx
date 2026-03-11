@@ -2,7 +2,9 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Compass, Search, Heart, CalendarCheck, User } from "lucide-react";
+import { Compass, Search, Heart, CalendarCheck, User, Store } from "lucide-react";
+import { useState, useEffect } from "react";
+import { createClient } from "@/lib/supabase/client";
 
 const NAV_ITEMS = [
   { href: "/home", label: "ホーム", icon: Compass },
@@ -14,6 +16,24 @@ const NAV_ITEMS = [
 
 export function BottomNav() {
   const pathname = usePathname();
+  const [isShopOwner, setIsShopOwner] = useState(false);
+
+  useEffect(() => {
+    const supabase = createClient();
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (user) {
+        supabase
+          .from("users")
+          .select("role")
+          .eq("id", user.id)
+          .single()
+          .then(({ data }) => {
+            const d = data as { role: string } | null;
+            setIsShopOwner(d?.role === "shop_owner");
+          });
+      }
+    });
+  }, []);
 
   function isActive(item: (typeof NAV_ITEMS)[number]) {
     if (item.href === "/mypage") {
@@ -47,6 +67,16 @@ export function BottomNav() {
             </Link>
           );
         })}
+        {/* shop_ownerの場合、店舗管理への切り替えボタンを追加 */}
+        {isShopOwner && (
+          <Link
+            href="/dashboard"
+            className="flex flex-1 flex-col items-center justify-center gap-0.5 text-[10px] text-primary transition-colors hover:text-primary/80"
+          >
+            <Store className="h-5 w-5" strokeWidth={1.5} />
+            <span className="font-medium">管理</span>
+          </Link>
+        )}
       </div>
       {/* Safe area padding for notch devices */}
       <div className="h-[env(safe-area-inset-bottom)]" />

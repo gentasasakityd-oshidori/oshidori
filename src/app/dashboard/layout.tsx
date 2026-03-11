@@ -18,6 +18,8 @@ import {
   Crown,
   Bot,
   FileEdit,
+  ClipboardEdit,
+  Share2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet";
@@ -38,11 +40,11 @@ const ROUTE_GROUP_MAP: Record<string, string> = {
   "/dashboard/updates": "/dashboard/content",
   "/dashboard/supply-flash": "/dashboard/content",
   "/dashboard/photos": "/dashboard/content",
-  "/dashboard/sns-hub": "/dashboard/content",
   "/dashboard/fans": "/dashboard/interaction",
   "/dashboard/fan-letters": "/dashboard/interaction",
   "/dashboard/messages": "/dashboard/interaction",
   "/dashboard/reservations": "/dashboard/interaction",
+  "/dashboard/fan-club": "/dashboard/interaction",
   "/dashboard/shop": "/dashboard/settings",
   "/dashboard/qrcode": "/dashboard/settings",
   "/dashboard/integrations": "/dashboard/settings",
@@ -59,34 +61,35 @@ const NAV_ITEMS = [
     icon: LayoutDashboard,
   },
   {
+    href: "/dashboard/daily-report",
+    label: "日報",
+    icon: ClipboardEdit,
+  },
+  {
     href: "/dashboard/content",
     label: "コンテンツ",
     icon: FileEdit,
-    // 統合: ストーリー管理、近況更新、食べてほしい一品、写真撮影、SNS配信ハブ
   },
   {
     href: "/dashboard/interaction",
-    label: "お客さんとの交流",
-    icon: MessageCircle,
-    // 統合: ファン一覧、ファンレター、メッセージ配信、予約打診管理
+    label: "ファンクラブ運営",
+    icon: Crown,
   },
   // 第2層
   {
     href: "/dashboard/settings",
     label: "店舗設定",
     icon: Store,
-    // 統合: 店舗情報、QRコード、外部連携
+  },
+  {
+    href: "/dashboard/sns-hub",
+    label: "SNS配信",
+    icon: Share2,
   },
   {
     href: "/dashboard/ai",
     label: "AI機能",
     icon: Bot,
-    // 統合: AIインタビュー、AI提案履歴
-  },
-  {
-    href: "/dashboard/fan-club",
-    label: "ファンクラブ運営",
-    icon: Crown,
   },
 ];
 
@@ -140,7 +143,7 @@ function SidebarContent({
           return (
             <div key={item.href}>
               {/* 第1層と第2層の区切り */}
-              {index === 3 && (
+              {index === 4 && (
                 <div className="my-3 border-t border-border/50 pt-2">
                   <span className="px-3 text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">
                     設定・管理
@@ -198,11 +201,11 @@ function SidebarContent({
         )}
         <Link
           href="/home"
-          className="flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
+          className="flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
           onClick={onNavigate}
         >
           <ChevronLeft className="h-4 w-4" />
-          サイトに戻る
+          消費者ページへ戻る
         </Link>
       </div>
     </div>

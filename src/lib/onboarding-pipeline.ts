@@ -48,24 +48,23 @@ export async function triggerPostApprovalPipeline(
   } catch (error) {
     console.error(`[Pipeline] Shop ${shopId}: Pipeline error:`, error);
 
-    // エラー時はフェーズをエラー直前の状態に留める（自動リカバリ可能）
-    // 現在のフェーズを確認
-    const { data: shop } = await supabase
-      .from("shops")
-      .select("onboarding_phase")
-      .eq("id", shopId)
-      .single();
-
-    const currentPhase = (shop as { onboarding_phase: string } | null)
-      ?.onboarding_phase;
-
-    // pre_research_running で失敗 → approved に戻す
-    if (currentPhase === "pre_research_running") {
-      await updatePhase(supabase, shopId, "approved");
-    }
-    // design_doc_generating で失敗 → pre_research_done に留める
-    else if (currentPhase === "design_doc_generating") {
-      await updatePhase(supabase, shopId, "pre_research_done");
+    // エラー時は pipeline_error フェーズに設定し、管理画面から再実行可能にする
+    try {
+      await updatePhase(supabase, shopId, "pipeline_error");
+      // エラー情報をメタデータに保存
+      await supabase
+        .from("shops")
+        .update({
+          metadata: {
+            pipeline_error: {
+              message: error instanceof Error ? error.message : String(error),
+              occurred_at: new Date().toISOString(),
+            },
+          },
+        })
+        .eq("id", shopId);
+    } catch (updateErr) {
+      console.error(`[Pipeline] Shop ${shopId}: Failed to set error phase:`, updateErr);
     }
   }
 }

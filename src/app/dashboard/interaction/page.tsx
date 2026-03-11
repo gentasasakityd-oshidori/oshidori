@@ -8,6 +8,9 @@ import {
   MessageCircle,
   CalendarClock,
   ChevronRight,
+  Crown,
+  Gift,
+  Sparkles,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -66,8 +69,8 @@ export default function InteractionPage() {
   const INTERACTION_SECTIONS = [
     {
       id: "fans",
-      label: "ファン一覧",
-      description: "推し登録してくれたお客さんの一覧",
+      label: "会員管理",
+      description: "推し登録してくれたファンクラブ会員の一覧・分析",
       icon: Users,
       href: "/dashboard/fans",
       emoji: "👥",
@@ -76,7 +79,7 @@ export default function InteractionPage() {
     {
       id: "fan-letters",
       label: "ファンレター",
-      description: "お客さんからの応援メッセージ",
+      description: "お客さんからの応援メッセージを確認・返信",
       icon: Mail,
       href: "/dashboard/fan-letters",
       emoji: "📬",
@@ -92,14 +95,30 @@ export default function InteractionPage() {
       emoji: "📨",
     },
     {
+      id: "benefits",
+      label: "特典提供",
+      description: "会員特典の設定・提供履歴の管理",
+      icon: Gift,
+      href: "/dashboard/fan-club",
+      emoji: "🎁",
+    },
+    {
       id: "reservations",
-      label: "予約打診",
-      description: "お客さんからの予約リクエストの管理",
+      label: "予約管理",
+      description: "お客さんからの予約リクエストの受付・管理",
       icon: CalendarClock,
       href: "/dashboard/reservations",
       emoji: "📅",
       badge: pendingReservations > 0 ? `${pendingReservations}件` : undefined,
       badgeVariant: pendingReservations > 0 ? "destructive" as const : undefined,
+    },
+    {
+      id: "fan-club-settings",
+      label: "ファンクラブ設計",
+      description: "プラン設定・加入条件・AI推奨アドバイス",
+      icon: Crown,
+      href: "/dashboard/fan-club",
+      emoji: "👑",
     },
   ];
 
@@ -107,12 +126,37 @@ export default function InteractionPage() {
     <div className="mx-auto max-w-4xl space-y-6">
       <div>
         <h1 className="text-xl font-bold flex items-center gap-2">
-          💬 お客さんとの交流
+          <Crown className="h-5 w-5 text-primary" />
+          ファンクラブ運営
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          ファンとのコミュニケーションをまとめて管理
+          会員管理・特典提供・コミュニケーションをまとめて運営
         </p>
       </div>
+
+      {/* ファンクラブ概要カード */}
+      <Card className="border-primary/20 bg-gradient-to-r from-primary/5 to-amber-50/50">
+        <CardContent className="p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10">
+                <Sparkles className="h-5 w-5 text-primary" />
+              </div>
+              <div>
+                <p className="text-sm font-medium">ファンクラブ会員</p>
+                <p className="text-2xl font-bold text-primary">
+                  {fanCount !== null ? fanCount : "—"}
+                  <span className="ml-1 text-sm font-normal text-muted-foreground">人</span>
+                </p>
+              </div>
+            </div>
+            <div className="text-right">
+              <p className="text-xs text-muted-foreground">未読レター</p>
+              <p className="text-lg font-bold text-amber-600">{unreadLetters}</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       <div className="space-y-3">
         {INTERACTION_SECTIONS.map((section) => (
