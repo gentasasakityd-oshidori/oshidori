@@ -5,22 +5,16 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { createClient } from "@supabase/supabase-js";
+import { requireAdmin } from "@/lib/admin-auth";
 import { triggerPostApprovalPipeline } from "@/lib/onboarding-pipeline";
 
-async function verifyAdmin(supabase: Awaited<ReturnType<typeof createServerSupabaseClient>>) {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return null;
-
-  const { data: profile } = await supabase
-    .from("users")
-    .select("role, is_admin")
-    .eq("id", user.id)
-    .single();
-
-  const p = profile as { role: string; is_admin: boolean } | null;
-  if (!p || (p.role !== "admin" && !p.is_admin)) return null;
-  return user;
+// 管理者用: RLSバイパスでサービスロールクライアント使用
+function createAdminClient() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  );
 }
 
 export async function GET(
@@ -28,16 +22,13 @@ export async function GET(
   { params }: { params: Promise<{ shopId: string }> }
 ) {
   try {
-    const supabase = await createServerSupabaseClient();
-    const admin = await verifyAdmin(supabase);
-    if (!admin) {
+    const { isAdmin } = await requireAdmin();
+    if (!isAdmin) {
       return NextResponse.json({ error: "権限がありません" }, { status: 403 });
     }
 
     const { shopId } = await params;
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const db = supabase as any;
+    const db = createAdminClient();
 
     // 店舗情報
     const { data: shop } = await db
@@ -103,9 +94,8 @@ export async function PATCH(
   { params }: { params: Promise<{ shopId: string }> }
 ) {
   try {
-    const supabase = await createServerSupabaseClient();
-    const admin = await verifyAdmin(supabase);
-    if (!admin) {
+    const { isAdmin } = await requireAdmin();
+    if (!isAdmin) {
       return NextResponse.json({ error: "権限がありません" }, { status: 403 });
     }
 
@@ -113,8 +103,7 @@ export async function PATCH(
     const body = await request.json();
     const { action, phase, interviewer_id, scheduled_date, scheduled_time } = body;
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const db = supabase as any;
+    const db = createAdminClient();
 
     // フェーズの手動変更
     if (action === "update_phase" && phase) {
@@ -191,7 +180,7 @@ export async function PATCH(
       }
 
       // 承認後パイプラインを fire-and-forget で実行
-      triggerPostApprovalPipeline(supabase, shopId).catch((err) => {
+      triggerPostApprovalPipeline(db, shopId).catch((err) => {
         console.error("[Pipeline] Post-approval pipeline error:", err);
       });
 
@@ -206,7 +195,7 @@ export async function PATCH(
         .update({ onboarding_phase: "pre_research_running" })
         .eq("id", shopId);
 
-      triggerPostApprovalPipeline(supabase, shopId).catch((err) => {
+      triggerPostApprovalPipeline(db, shopId).catch((err) => {
         console.error("[Pipeline] Retry error:", err);
       });
 
