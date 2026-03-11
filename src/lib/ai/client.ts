@@ -30,6 +30,8 @@ export function getOpenAIClient(): OpenAI {
   if (!_openaiClient) {
     _openaiClient = new OpenAI({
       apiKey: process.env.OPENAI_API_KEY,
+      timeout: 120_000, // 120秒タイムアウト
+      maxRetries: 2,    // 最大2回リトライ
     });
   }
   return _openaiClient;
@@ -101,17 +103,33 @@ async function createOpenAICompletion(
 ): Promise<ChatCompletionResult> {
   const openai = getOpenAIClient();
 
-  const completion = await openai.chat.completions.create({
-    model,
-    temperature,
-    messages: messages.map((m) => ({
-      role: m.role,
-      content: m.content,
-    })),
-  });
+  if (!process.env.OPENAI_API_KEY) {
+    throw new Error("OPENAI_API_KEY が設定されていません。Vercelの環境変数を確認してください。");
+  }
+
+  let completion;
+  try {
+    completion = await openai.chat.completions.create({
+      model,
+      temperature,
+      messages: messages.map((m) => ({
+        role: m.role,
+        content: m.content,
+      })),
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`[AI] OpenAI API error (model=${model}):`, msg);
+    throw new Error(`OpenAI API呼び出し失敗 (${model}): ${msg}`);
+  }
+
+  const content = completion.choices[0]?.message?.content;
+  if (!content) {
+    console.warn(`[AI] OpenAI returned empty content (model=${model})`);
+  }
 
   return {
-    content: completion.choices[0]?.message?.content ?? "",
+    content: content ?? "",
     usage: {
       prompt_tokens: completion.usage?.prompt_tokens ?? 0,
       completion_tokens: completion.usage?.completion_tokens ?? 0,
@@ -140,16 +158,27 @@ async function createAnthropicCompletion(
   const systemMessage = messages.find((m) => m.role === "system");
   const conversationMessages = messages.filter((m) => m.role !== "system");
 
-  const response = await client.messages.create({
-    model,
-    max_tokens: maxTokens,
-    temperature,
-    system: systemMessage?.content ?? undefined,
-    messages: conversationMessages.map((m) => ({
-      role: m.role as "user" | "assistant",
-      content: m.content,
-    })),
-  });
+  if (!process.env.ANTHROPIC_API_KEY) {
+    throw new Error("ANTHROPIC_API_KEY が設定されていません。Vercelの環境変数を確認してください。");
+  }
+
+  let response;
+  try {
+    response = await client.messages.create({
+      model,
+      max_tokens: maxTokens,
+      temperature,
+      system: systemMessage?.content ?? undefined,
+      messages: conversationMessages.map((m) => ({
+        role: m.role as "user" | "assistant",
+        content: m.content,
+      })),
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`[AI] Anthropic API error (model=${model}):`, msg);
+    throw new Error(`Anthropic API呼び出し失敗 (${model}): ${msg}`);
+  }
 
   const textBlock = response.content.find(
     (block) => block.type === "text",

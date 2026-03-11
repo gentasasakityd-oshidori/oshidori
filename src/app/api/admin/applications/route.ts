@@ -1,7 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
+import { after } from "next/server";
+import { createClient } from "@supabase/supabase-js";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { triggerPostApprovalPipeline } from "@/lib/onboarding-pipeline";
 import { notifyApplicationResult } from "@/lib/email";
+
+// Vercelサーバーレス関数の最大実行時間（秒）
+export const maxDuration = 300;
+
+// パイプライン用: サービスロールクライアント（fire-and-forget / after()対応）
+function createAdminClient() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  );
+}
 
 async function verifyAdmin(supabase: Awaited<ReturnType<typeof createServerSupabaseClient>>) {
   const {
@@ -133,6 +146,7 @@ export async function PATCH(request: Request) {
     }
 
     // 承認の場合: ユーザーのroleをshop_ownerに更新 + shopsテーブルに初期レコード
+    let pipelineShopId: string | null = null;
     if (action === "approved") {
       // ユーザーrole更新
       await db
@@ -163,40 +177,38 @@ export async function PATCH(request: Request) {
         owner_id: app.user_id,
         area: app.shop_area || app.address_prefecture || "未設定",
         category: app.shop_genre || "japanese",
-        // 申請時に入力された住所・電話をコピー
         address_prefecture: app.address_prefecture || null,
         address_city: app.address_city || null,
         address_street: app.address_street || null,
         address_building: app.address_building || null,
         phone: app.phone || null,
-        // SNS・ウェブサイト情報をコピー
         website_url: app.website_url || null,
         instagram_url: app.instagram_url || null,
         tabelog_url: app.tabelog_url || null,
         gmb_url: app.gmb_url || null,
         is_published: false,
-        onboarding_phase: "approved",
+        onboarding_phase: "pre_research_running",
       }).select("id").single();
 
-      // 承認後パイプラインを fire-and-forget で実行
-      // 事前調査 → インタビュー設計書生成 を自動チェーン
       if (newShop) {
-        const shopId = (newShop as { id: string }).id;
-
-        // パイプライン開始前にフェーズを即時更新（"approved"のまま停止するバグを防止）
-        await db
-          .from("shops")
-          .update({ onboarding_phase: "pre_research_running" })
-          .eq("id", shopId);
-
-        triggerPostApprovalPipeline(supabase, shopId).catch((err) => {
-          console.error("[Pipeline] Background pipeline error:", err);
-        });
+        pipelineShopId = (newShop as { id: string }).id;
       }
     }
 
+    // 承認後パイプラインを after() で実行（レスポンス送信後もサーバーレス関数を維持）
+    if (pipelineShopId) {
+      const shopId = pipelineShopId;
+      after(async () => {
+        try {
+          const adminDb = createAdminClient();
+          await triggerPostApprovalPipeline(adminDb, shopId);
+        } catch (err) {
+          console.error("[Pipeline] Background pipeline error:", err);
+        }
+      });
+    }
+
     // 審査結果メール通知（承認・却下共通）
-    // 申請者のメールアドレスを取得
     const { data: applicantUser } = await db
       .from("users")
       .select("email")

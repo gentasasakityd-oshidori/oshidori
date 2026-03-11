@@ -1021,6 +1021,13 @@ export default async function HomePage() {
           <Button size="lg" variant="secondary" className="mt-6" asChild>
             <Link href="/for-shops">無料で始める</Link>
           </Button>
+          <p className="mt-4 text-xs opacity-70 text-primary-foreground">
+            飲食店の方は
+            <Link href="/apply-shop-owner" className="underline hover:opacity-100 mx-0.5">
+              こちらから掲載リクエスト
+            </Link>
+            できます
+          </p>
         </div>
       </section>
     </>

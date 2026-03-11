@@ -5,9 +5,14 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { after } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { requireAdmin } from "@/lib/admin-auth";
 import { triggerPostApprovalPipeline } from "@/lib/onboarding-pipeline";
+
+// Vercelサーバーレス関数の最大実行時間（秒）
+// after() でパイプラインを実行するため、十分な時間を確保
+export const maxDuration = 300;
 
 // 管理者用: RLSバイパスでサービスロールクライアント使用
 function createAdminClient() {
@@ -179,9 +184,13 @@ export async function PATCH(
         return NextResponse.json({ error: "承認に失敗しました" }, { status: 500 });
       }
 
-      // 承認後パイプラインを fire-and-forget で実行
-      triggerPostApprovalPipeline(db, shopId).catch((err) => {
-        console.error("[Pipeline] Post-approval pipeline error:", err);
+      // after() でレスポンス送信後もサーバーレス関数を維持してパイプライン実行
+      after(async () => {
+        try {
+          await triggerPostApprovalPipeline(db, shopId);
+        } catch (err) {
+          console.error("[Pipeline] Post-approval pipeline error:", err);
+        }
       });
 
       return NextResponse.json({ success: true, phase: "pre_research_running", message: "承認しました。事前調査を開始します" });
@@ -195,8 +204,12 @@ export async function PATCH(
         .update({ onboarding_phase: "pre_research_running" })
         .eq("id", shopId);
 
-      triggerPostApprovalPipeline(db, shopId).catch((err) => {
-        console.error("[Pipeline] Retry error:", err);
+      after(async () => {
+        try {
+          await triggerPostApprovalPipeline(db, shopId);
+        } catch (err) {
+          console.error("[Pipeline] Retry error:", err);
+        }
       });
 
       return NextResponse.json({ success: true, message: "パイプラインを再実行しています" });
