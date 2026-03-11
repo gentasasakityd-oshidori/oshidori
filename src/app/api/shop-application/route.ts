@@ -71,8 +71,11 @@ export async function POST(request: Request) {
       shop_genre,
       shop_area,
       applicant_name,
+      applicant_name_sei,
+      applicant_name_mei,
       applicant_role,
       message,
+      postal_code,
       address_prefecture,
       address_city,
       address_street,
@@ -89,7 +92,11 @@ export async function POST(request: Request) {
 
     // ======= ステップ1: 基本情報保存 =======
     if (step === 1) {
-      if (!shop_name || !applicant_name) {
+      // 姓名分割対応: applicant_nameは姓名結合でも送られる（後方互換）
+      const nameToSave = applicant_name || (applicant_name_sei && applicant_name_mei
+        ? `${applicant_name_sei} ${applicant_name_mei}` : null);
+
+      if (!shop_name || !nameToSave) {
         return NextResponse.json(
           { error: "店名と申請者名は必須です" },
           { status: 400 }
@@ -119,18 +126,21 @@ export async function POST(request: Request) {
         .eq("status", "draft")
         .maybeSingle();
 
+      const step1Data = {
+        shop_name,
+        shop_genre: shop_genre || null,
+        applicant_name: nameToSave,
+        applicant_name_sei: applicant_name_sei || null,
+        applicant_name_mei: applicant_name_mei || null,
+        applicant_role: applicant_role || null,
+        message: message || null,
+        application_step: 1,
+      };
+
       if (existing) {
-        // 既存ドラフトを更新
         const { error: updateError } = await db
           .from("shop_role_applications")
-          .update({
-            shop_name,
-            shop_genre: shop_genre || null,
-            applicant_name,
-            applicant_role: applicant_role || null,
-            message: message || null,
-            application_step: 1,
-          })
+          .update(step1Data)
           .eq("id", existing.id);
 
         if (updateError) {
@@ -144,13 +154,8 @@ export async function POST(request: Request) {
         .from("shop_role_applications")
         .insert({
           user_id: user.id,
-          shop_name,
-          shop_genre: shop_genre || null,
-          applicant_name,
-          applicant_role: applicant_role || null,
-          message: message || null,
+          ...step1Data,
           status: "draft",
-          application_step: 1,
         })
         .select("id")
         .single();
@@ -180,6 +185,7 @@ export async function POST(request: Request) {
       const { error: updateError } = await db
         .from("shop_role_applications")
         .update({
+          postal_code: postal_code || null,
           address_prefecture: address_prefecture || null,
           address_city: address_city || null,
           address_street: address_street || null,
@@ -232,7 +238,10 @@ export async function POST(request: Request) {
     }
 
     // ======= レガシー（stepなし）: 一括送信 =======
-    if (!shop_name || !applicant_name) {
+    const legacyName = applicant_name || (applicant_name_sei && applicant_name_mei
+      ? `${applicant_name_sei} ${applicant_name_mei}` : null);
+
+    if (!shop_name || !legacyName) {
       return NextResponse.json(
         { error: "店名と申請者名は必須です" },
         { status: 400 }
@@ -273,9 +282,12 @@ export async function POST(request: Request) {
       shop_name,
       shop_genre: shop_genre || null,
       shop_area: shop_area || null,
-      applicant_name,
+      applicant_name: legacyName,
+      applicant_name_sei: applicant_name_sei || null,
+      applicant_name_mei: applicant_name_mei || null,
       applicant_role: applicant_role || null,
       message: message || null,
+      postal_code: postal_code || null,
       address_prefecture: address_prefecture || null,
       address_city: address_city || null,
       address_street: address_street || null,

@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   Store, ArrowLeft, ArrowRight, CheckCircle2, MapPin, Phone,
-  Globe, Instagram, Loader2,
+  Globe, Instagram, Loader2, Search,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -39,20 +39,25 @@ export default function ApplyShopOwnerPage() {
   const [error, setError] = useState<string | null>(null);
   const [currentStep, setCurrentStep] = useState(1);
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
+  const [isLookingUpPostal, setIsLookingUpPostal] = useState(false);
 
   const [formData, setFormData] = useState({
     // Step 1: 基本情報
     shopName: "",
     shopGenre: "",
-    applicantName: "",
+    applicantNameSei: "",
+    applicantNameMei: "",
     applicantRole: "",
     message: "",
     // Step 2: 所在地・連絡先
+    postalCode: "",
     addressPrefecture: "",
     addressCity: "",
     addressStreet: "",
     addressBuilding: "",
-    phone: "",
+    phone1: "",
+    phone2: "",
+    phone3: "",
     // Step 2: SNS・ウェブサイト
     websiteUrl: "",
     instagramUrl: "",
@@ -69,7 +74,6 @@ export default function ApplyShopOwnerPage() {
       setIsLoggedIn(!!user);
 
       if (user) {
-        // 既存のドラフト or 審査中申請をチェック
         try {
           const res = await fetch("/api/shop-application");
           if (res.ok) {
@@ -77,25 +81,36 @@ export default function ApplyShopOwnerPage() {
             if (data.hasPending) {
               setHasPending(true);
             } else if (data.draft) {
-              // ドラフトデータを復元
               const d = data.draft;
+              // 電話番号の分割復元
+              const phone = d.phone || "";
+              let phone1 = "", phone2 = "", phone3 = "";
+              if (phone.length === 10) {
+                phone1 = phone.slice(0, 2); phone2 = phone.slice(2, 6); phone3 = phone.slice(6);
+              } else if (phone.length === 11) {
+                phone1 = phone.slice(0, 3); phone2 = phone.slice(3, 7); phone3 = phone.slice(7);
+              } else if (phone) {
+                phone1 = phone;
+              }
+
               setFormData({
                 shopName: d.shop_name || "",
                 shopGenre: d.shop_genre || "",
-                applicantName: d.applicant_name || "",
+                applicantNameSei: d.applicant_name_sei || "",
+                applicantNameMei: d.applicant_name_mei || "",
                 applicantRole: d.applicant_role || "",
                 message: d.message || "",
+                postalCode: d.postal_code || "",
                 addressPrefecture: d.address_prefecture || "",
                 addressCity: d.address_city || "",
                 addressStreet: d.address_street || "",
                 addressBuilding: d.address_building || "",
-                phone: d.phone || "",
+                phone1, phone2, phone3,
                 websiteUrl: d.website_url || "",
                 instagramUrl: d.instagram_url || "",
                 tabelogUrl: d.tabelog_url || "",
                 gmbUrl: d.gmb_url || "",
               });
-              // 保存済みステップの次から開始
               setCurrentStep(Math.min((d.application_step || 1) + 1, 3));
             }
           }
@@ -107,10 +122,54 @@ export default function ApplyShopOwnerPage() {
     checkAuthAndDraft();
   }, []);
 
+  // 郵便番号から住所を自動入力
+  async function lookupPostalCode() {
+    const code = formData.postalCode.replace(/[-\s〒]/g, "");
+    if (!/^\d{7}$/.test(code)) {
+      setError("郵便番号は7桁の数字で入力してください");
+      return;
+    }
+    setIsLookingUpPostal(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/postal-code?code=${code}`);
+      if (!res.ok) {
+        const data = await res.json();
+        setError(data.error || "住所の検索に失敗しました");
+        return;
+      }
+      const data = await res.json();
+      setFormData((prev) => ({
+        ...prev,
+        addressPrefecture: data.prefecture || prev.addressPrefecture,
+        addressCity: data.city || prev.addressCity,
+        addressStreet: data.street || prev.addressStreet,
+      }));
+    } catch {
+      setError("住所の検索に失敗しました");
+    } finally {
+      setIsLookingUpPostal(false);
+    }
+  }
+
+  // 電話番号の結合
+  function getPhoneNumber(): string {
+    return `${formData.phone1}${formData.phone2}${formData.phone3}`;
+  }
+
+  // 電話番号フォーマット表示用
+  function formatPhone(): string {
+    const p = getPhoneNumber();
+    if (p.length === 10) return `${p.slice(0,2)}-${p.slice(2,6)}-${p.slice(6)}`;
+    if (p.length === 11) return `${p.slice(0,3)}-${p.slice(3,7)}-${p.slice(7)}`;
+    return p;
+  }
+
   // Step1 バリデーション
   function validateStep1(): string | null {
     if (!formData.shopName.trim()) return "店名を入力してください";
-    if (!formData.applicantName.trim()) return "お名前を入力してください";
+    if (!formData.applicantNameSei.trim()) return "姓を入力してください";
+    if (!formData.applicantNameMei.trim()) return "名を入力してください";
     return null;
   }
 
@@ -119,10 +178,10 @@ export default function ApplyShopOwnerPage() {
     if (!formData.addressPrefecture) return "都道府県を選択してください";
     if (!formData.addressCity.trim()) return "市区町村を入力してください";
     if (!formData.addressStreet.trim()) return "町名番地を入力してください";
-    if (!formData.phone.trim()) return "電話番号を入力してください";
-    const phoneDigits = formData.phone.replace(/[-\s]/g, "");
-    if (!/^0\d{9,10}$/.test(phoneDigits)) {
-      return "正しい電話番号を入力してください（例: 03-1234-5678）";
+    const phone = getPhoneNumber();
+    if (!phone) return "電話番号を入力してください";
+    if (!/^0\d{9,10}$/.test(phone)) {
+      return "正しい電話番号を入力してください";
     }
     return null;
   }
@@ -142,7 +201,9 @@ export default function ApplyShopOwnerPage() {
           step: 1,
           shop_name: formData.shopName,
           shop_genre: formData.shopGenre || null,
-          applicant_name: formData.applicantName,
+          applicant_name: `${formData.applicantNameSei} ${formData.applicantNameMei}`,
+          applicant_name_sei: formData.applicantNameSei,
+          applicant_name_mei: formData.applicantNameMei,
           applicant_role: formData.applicantRole || null,
           message: formData.message || null,
         }),
@@ -171,17 +232,19 @@ export default function ApplyShopOwnerPage() {
 
     setIsSaving(true);
     try {
-      const phoneDigits = formData.phone.replace(/[-\s]/g, "");
+      const phone = getPhoneNumber();
+      const postalCode = formData.postalCode.replace(/[-\s〒]/g, "");
       const res = await fetch("/api/shop-application", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           step: 2,
+          postal_code: postalCode || null,
           address_prefecture: formData.addressPrefecture,
           address_city: formData.addressCity,
           address_street: formData.addressStreet,
           address_building: formData.addressBuilding || null,
-          phone: phoneDigits,
+          phone,
           website_url: formData.websiteUrl || null,
           instagram_url: formData.instagramUrl || null,
           tabelog_url: formData.tabelogUrl || null,
@@ -303,7 +366,7 @@ export default function ApplyShopOwnerPage() {
         飲食店向けページに戻る
       </Link>
 
-      {/* ステップインジケーター（3ステップであることを明確に表示） */}
+      {/* ステップインジケーター */}
       <div className="mb-2 text-center">
         <p className="text-sm font-medium text-muted-foreground">
           ステップ <span className="text-lg font-bold text-primary">{currentStep}</span> / <span className="text-lg font-bold">3</span>
@@ -415,16 +478,31 @@ export default function ApplyShopOwnerPage() {
                 </Select>
               </div>
 
+              {/* 姓・名の分割入力 */}
               <div>
-                <Label htmlFor="applicantName">お名前 *</Label>
-                <Input
-                  id="applicantName"
-                  value={formData.applicantName}
-                  onChange={(e) =>
-                    setFormData({ ...formData, applicantName: e.target.value })
-                  }
-                  placeholder="例: 山田太郎"
-                />
+                <Label>お名前 *</Label>
+                <div className="mt-1 grid grid-cols-2 gap-2">
+                  <div>
+                    <Input
+                      id="applicantNameSei"
+                      value={formData.applicantNameSei}
+                      onChange={(e) =>
+                        setFormData({ ...formData, applicantNameSei: e.target.value })
+                      }
+                      placeholder="姓（例: 山田）"
+                    />
+                  </div>
+                  <div>
+                    <Input
+                      id="applicantNameMei"
+                      value={formData.applicantNameMei}
+                      onChange={(e) =>
+                        setFormData({ ...formData, applicantNameMei: e.target.value })
+                      }
+                      placeholder="名（例: 太郎）"
+                    />
+                  </div>
+                </div>
               </div>
 
               <div>
@@ -483,6 +561,44 @@ export default function ApplyShopOwnerPage() {
           {/* Step 2: 所在地・連絡先・SNS */}
           {currentStep === 2 && (
             <div className="space-y-4">
+              {/* 郵便番号 */}
+              <div>
+                <Label htmlFor="postalCode">〒 郵便番号</Label>
+                <div className="mt-1 flex gap-2">
+                  <Input
+                    id="postalCode"
+                    value={formData.postalCode}
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/[^\d-]/g, "");
+                      setFormData({ ...formData, postalCode: val });
+                    }}
+                    placeholder="例: 152-0033"
+                    className="flex-1"
+                    maxLength={8}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={lookupPostalCode}
+                    disabled={isLookingUpPostal}
+                    className="shrink-0"
+                  >
+                    {isLookingUpPostal ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <>
+                        <Search className="mr-1 h-3.5 w-3.5" />
+                        住所検索
+                      </>
+                    )}
+                  </Button>
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  郵便番号を入力して「住所検索」を押すと自動入力されます
+                </p>
+              </div>
+
               <div>
                 <Label htmlFor="addressPrefecture">都道府県 *</Label>
                 <Select
@@ -540,24 +656,63 @@ export default function ApplyShopOwnerPage() {
                 />
               </div>
 
+              {/* 電話番号 3分割 */}
               <div>
-                <Label htmlFor="phone">
+                <Label>
                   <span className="flex items-center gap-1">
                     <Phone className="h-3.5 w-3.5" />
                     電話番号 *
                   </span>
                 </Label>
-                <Input
-                  id="phone"
-                  type="tel"
-                  value={formData.phone}
-                  onChange={(e) =>
-                    setFormData({ ...formData, phone: e.target.value })
-                  }
-                  placeholder="例: 03-1234-5678"
-                />
+                <div className="mt-1 flex items-center gap-1">
+                  <Input
+                    type="tel"
+                    value={formData.phone1}
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/\D/g, "").slice(0, 4);
+                      setFormData({ ...formData, phone1: val });
+                      if (val.length >= 2 && val.length <= 4) {
+                        const next = document.getElementById("phone2");
+                        if (next && val.length >= 2) next.focus();
+                      }
+                    }}
+                    placeholder="03"
+                    className="w-20 text-center"
+                    maxLength={4}
+                  />
+                  <span className="text-muted-foreground">-</span>
+                  <Input
+                    id="phone2"
+                    type="tel"
+                    value={formData.phone2}
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/\D/g, "").slice(0, 4);
+                      setFormData({ ...formData, phone2: val });
+                      if (val.length >= 4) {
+                        const next = document.getElementById("phone3");
+                        if (next) next.focus();
+                      }
+                    }}
+                    placeholder="1234"
+                    className="w-24 text-center"
+                    maxLength={4}
+                  />
+                  <span className="text-muted-foreground">-</span>
+                  <Input
+                    id="phone3"
+                    type="tel"
+                    value={formData.phone3}
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/\D/g, "").slice(0, 4);
+                      setFormData({ ...formData, phone3: val });
+                    }}
+                    placeholder="5678"
+                    className="w-24 text-center"
+                    maxLength={4}
+                  />
+                </div>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  ハイフンあり/なしどちらでも入力できます
+                  市外局番から入力してください
                 </p>
               </div>
 
@@ -667,7 +822,7 @@ export default function ApplyShopOwnerPage() {
                   <span className="text-muted-foreground">ジャンル</span>
                   <span>{formData.shopGenre || "未選択"}</span>
                   <span className="text-muted-foreground">お名前</span>
-                  <span>{formData.applicantName}</span>
+                  <span>{formData.applicantNameSei} {formData.applicantNameMei}</span>
                   <span className="text-muted-foreground">役割</span>
                   <span>
                     {formData.applicantRole === "owner" && "オーナー"}
@@ -688,13 +843,19 @@ export default function ApplyShopOwnerPage() {
               <div className="rounded-lg bg-muted/50 p-4 space-y-3">
                 <h3 className="text-sm font-semibold text-muted-foreground">所在地・連絡先</h3>
                 <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
+                  {formData.postalCode && (
+                    <>
+                      <span className="text-muted-foreground">郵便番号</span>
+                      <span>〒{formData.postalCode}</span>
+                    </>
+                  )}
                   <span className="text-muted-foreground">住所</span>
                   <span>
                     {formData.addressPrefecture} {formData.addressCity} {formData.addressStreet}
                     {formData.addressBuilding && ` ${formData.addressBuilding}`}
                   </span>
                   <span className="text-muted-foreground">電話番号</span>
-                  <span>{formData.phone}</span>
+                  <span>{formatPhone()}</span>
                 </div>
               </div>
 

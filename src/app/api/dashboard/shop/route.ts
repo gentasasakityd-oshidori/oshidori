@@ -165,6 +165,10 @@ export async function POST(request: NextRequest) {
       area,
       // ジオコーディング結果（フロントから渡される）
       nearest_station, latitude, longitude, walking_minutes,
+      // 詳細情報（オプション）
+      budget_lunch, budget_dinner, payment_methods,
+      service_charge, total_seats, private_rooms,
+      rental_available, smoking_policy, parking, opening_date,
     } = body;
 
     const errors: string[] = [];
@@ -258,6 +262,17 @@ export async function POST(request: NextRequest) {
         instagram_url: instagram_url?.trim() || null,
         x_url: x_url?.trim() || null,
         line_url: line_url?.trim() || null,
+        // 詳細情報（オプション）
+        budget_lunch: budget_lunch?.trim() || null,
+        budget_dinner: budget_dinner?.trim() || null,
+        payment_methods: Array.isArray(payment_methods) ? JSON.stringify(payment_methods) : null,
+        service_charge: service_charge?.trim() || null,
+        total_seats: total_seats ? parseInt(String(total_seats), 10) || null : null,
+        private_rooms: private_rooms || null,
+        rental_available: rental_available ?? false,
+        smoking_policy: smoking_policy || null,
+        parking: parking?.trim() || null,
+        opening_date: opening_date?.trim() || null,
         owner_id: user.id,
         is_published: false,
         onboarding_phase: "application_pending",
@@ -393,6 +408,19 @@ export async function PATCH(request: NextRequest) {
     if ("instagram_url" in updates && !validateUrl(updates.instagram_url)) errors.push("Instagram URLの形式が不正です");
     if ("x_url" in updates && !validateUrl(updates.x_url)) errors.push("X(Twitter) URLの形式が不正です");
     if ("line_url" in updates && !validateUrl(updates.line_url)) errors.push("LINE URLの形式が不正です");
+
+    // payment_methods が渡された場合、JSON変換
+    if ("payment_methods" in updates && updates.payment_methods) {
+      if (Array.isArray(updates.payment_methods)) {
+        updates.payment_methods = JSON.stringify(updates.payment_methods);
+      }
+    }
+
+    // total_seats が渡された場合、数値変換
+    if ("total_seats" in updates && updates.total_seats !== null) {
+      const seats = parseInt(String(updates.total_seats), 10);
+      updates.total_seats = isNaN(seats) ? null : seats;
+    }
 
     // 姓名分割: owner_real_name_sei / mei が渡された場合、owner_real_name も更新
     if ("owner_real_name_sei" in updates || "owner_real_name_mei" in updates) {

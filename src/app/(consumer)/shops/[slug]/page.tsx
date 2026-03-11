@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { Heart, MapPin, Clock, Phone, ChevronLeft, Check, CalendarClock, Send, Megaphone, ChevronRight, BookOpen, Sparkles } from "lucide-react";
+import { Heart, MapPin, Clock, Phone, ChevronLeft, Check, CalendarClock, Send, Megaphone, ChevronRight, BookOpen, Sparkles, Globe, ExternalLink, Train } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
@@ -10,7 +10,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { getShopBySlug as getDummyShopBySlug } from "@/lib/dummy-data";
-import { EMPATHY_TAGS, STORY_PERSPECTIVE_LABELS, BUDGET_LABELS, POC_FREE_MODE } from "@/lib/constants";
+import { EMPATHY_TAGS, STORY_PERSPECTIVE_LABELS, BUDGET_LABELS, POC_FREE_MODE, SMOKING_POLICIES, PRIVATE_ROOM_OPTIONS } from "@/lib/constants";
 import { generateShopEmpathyCards } from "@/lib/shop-empathy-cards";
 import { WORDING } from "@/constants/wording";
 import { THEME_TO_DISPLAY_TAG } from "@/lib/display-tags";
@@ -25,6 +25,7 @@ import { StoryReader } from "@/components/story-reader";
 const EngagementPrompt = dynamic(() => import("@/components/engagement-prompt").then(m => m.EngagementPrompt), { ssr: false });
 const ExperienceProfile = dynamic(() => import("@/components/experience-profile").then(m => m.ExperienceProfile), { ssr: false });
 const CheckinOshiFlow = dynamic(() => import("@/components/checkin-oshi-flow").then(m => m.CheckinOshiFlow), { ssr: false });
+const ShopMap = dynamic(() => import("@/components/shop-map").then(m => m.ShopMap), { ssr: false });
 import { trackStoryViewStart, trackStoryScrollDepth, trackQRAccess, trackUserLastAction, trackFanClubJoin, trackFanClubLeave } from "@/lib/tracking";
 
 export default function ShopDetailPage() {
@@ -63,8 +64,8 @@ export default function ShopDetailPage() {
   // ファンクラブ
   const [fanClubPlan, setFanClubPlan] = useState<{ plan_name: string; price: number; description: string | null; benefits: unknown } | null>(null);
   const [photoIndex, setPhotoIndex] = useState(0);
-  // コンテンツタブ
-  const [activeContentTab, setActiveContentTab] = useState<"story" | "menu" | "info">("story");
+  // コンテンツタブ（店舗情報は常時表示のためタブから除外）
+  const [activeContentTab, setActiveContentTab] = useState<"story" | "menu">("story");
   // チェックイン同時フロー
   const [showCheckinFlow, setShowCheckinFlow] = useState(false);
   // マイクロインタラクション
@@ -278,7 +279,7 @@ export default function ShopDetailPage() {
   }
 
   const mainStory = shop.stories[0];
-  const hoursDisplay = typeof shop.hours === "string" ? shop.hours : null;
+  const hoursDisplay: string | null = typeof shop.hours === "string" ? (shop.hours as string) : null;
 
   // C-12: Collect all photos for carousel (shop image + menu photos)
   const allPhotos: string[] = [];
@@ -658,12 +659,12 @@ export default function ShopDetailPage() {
         </section>
       )}
 
-      {/* コンテンツタブ */}
+      {/* コンテンツタブ（ストーリー / メニューのみ。店舗情報は常時表示） */}
       <div className="border-t border-gray-100">
         <div className="flex">
-          {(["story", "menu", "info"] as const).map((tab) => {
-            const labels = { story: "ストーリー", menu: "メニュー", info: "店舗情報" };
-            const icons = { story: "📖", menu: "🍽", info: "📍" };
+          {(["story", "menu"] as const).map((tab) => {
+            const labels = { story: "ストーリー", menu: "メニュー" };
+            const icons = { story: "📖", menu: "🍽" };
             return (
               <button
                 key={tab}
@@ -866,10 +867,9 @@ export default function ShopDetailPage() {
         </section>
       )}
 
-      {/* 店舗情報タブ */}
-      {activeContentTab === "info" && (
-      <section className="px-4 py-5">
-        <h2 className="text-sm font-bold text-[#2C3E50] mb-3">店舗情報</h2>
+      {/* 店舗情報（常時表示） */}
+      <section className="border-t border-gray-100 px-4 py-5">
+        <h2 className="text-sm font-bold text-[#2C3E50] mb-3">📍 店舗情報</h2>
         <div className="space-y-3">
           {/* 価格帯 */}
           {(() => {
@@ -885,29 +885,205 @@ export default function ShopDetailPage() {
               </div>
             ) : null;
           })()}
+
+          {/* 最寄り駅 */}
+          {(() => {
+            const ns = (shop as Record<string, unknown>).nearest_stations;
+            if (!Array.isArray(ns) || ns.length === 0) return null;
+            const stationList = ns as Array<{ name: string; line: string; walking_minutes: number }>;
+            return (
+              <div className="flex items-start gap-3">
+                <Train className="mt-0.5 h-4 w-4 shrink-0 text-gray-400" />
+                <div className="space-y-0.5">
+                  {stationList.map((station, i) => (
+                    <p key={i} className="text-sm text-gray-700">
+                      {station.name}駅
+                      <span className="text-xs text-gray-400 ml-1">({station.line})</span>
+                      <span className="text-xs text-gray-500 ml-1">徒歩{station.walking_minutes}分</span>
+                    </p>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
+
           {shop.address && (
             <div className="flex items-start gap-3">
               <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-gray-400" />
               <p className="text-sm text-gray-700">{shop.address}</p>
             </div>
           )}
-          {hoursDisplay && (
+
+          {/* 住所下にマップ表示 */}
+          {shop.basic_info?.latitude != null && shop.basic_info?.longitude != null ? (
+            <div className="mt-1">
+              <ShopMap
+                latitude={shop.basic_info.latitude}
+                longitude={shop.basic_info.longitude}
+                shopName={shop.name}
+                height="180px"
+              />
+            </div>
+          ) : null}
+
+          {hoursDisplay != null && hoursDisplay !== "" ? (
             <div className="flex items-start gap-3">
               <Clock className="mt-0.5 h-4 w-4 shrink-0 text-gray-400" />
               <div>
                 <p className="text-sm text-gray-700">{hoursDisplay}</p>
-                {shop.holidays && (
+                {typeof shop.holidays === "string" && shop.holidays ? (
                   <p className="text-xs text-gray-400">定休日: {shop.holidays}</p>
-                )}
+                ) : null}
               </div>
             </div>
-          )}
-          {shop.phone && (
+          ) : null}
+          {typeof shop.phone === "string" && shop.phone ? (
             <div className="flex items-start gap-3">
               <Phone className="mt-0.5 h-4 w-4 shrink-0 text-gray-400" />
-              <p className="text-sm text-gray-700">{shop.phone}</p>
+              <a href={`tel:${shop.phone}`} className="text-sm text-gray-700 hover:text-[#E06A4E]">
+                {shop.phone}
+              </a>
             </div>
-          )}
+          ) : null}
+
+          {/* 店舗詳細情報 */}
+          {(() => {
+            const s = shop as Record<string, unknown>;
+            const budgetLunch = s.budget_lunch as string | null;
+            const budgetDinner = s.budget_dinner as string | null;
+            const paymentMethods = Array.isArray(s.payment_methods) ? s.payment_methods as string[] : [];
+            const serviceCharge = s.service_charge as string | null;
+            const totalSeats = s.total_seats as number | null;
+            const privateRooms = s.private_rooms as string | null;
+            const rentalAvailable = s.rental_available as boolean | null;
+            const smokingPolicy = s.smoking_policy as string | null;
+            const parkingInfo = s.parking as string | null;
+            const openingDate = s.opening_date as string | null;
+            const hasDetail = budgetLunch || budgetDinner || paymentMethods.length > 0 || serviceCharge || totalSeats || privateRooms || smokingPolicy || parkingInfo || openingDate;
+            if (!hasDetail) return null;
+            const smokingLabel = smokingPolicy ? SMOKING_POLICIES.find(p => p.value === smokingPolicy)?.label || smokingPolicy : null;
+            const privateLabel = privateRooms ? PRIVATE_ROOM_OPTIONS.find(p => p.value === privateRooms)?.label || privateRooms : null;
+            return (
+              <div className="mt-3 rounded-lg bg-gray-50 p-3 space-y-1.5">
+                {(budgetLunch || budgetDinner) && (
+                  <div className="flex items-center gap-2 text-xs text-gray-600">
+                    <span className="text-gray-400 w-16 shrink-0">予算</span>
+                    <span>
+                      {budgetLunch && `ランチ ${budgetLunch}`}
+                      {budgetLunch && budgetDinner && " / "}
+                      {budgetDinner && `ディナー ${budgetDinner}`}
+                    </span>
+                  </div>
+                )}
+                {paymentMethods.length > 0 && (
+                  <div className="flex items-center gap-2 text-xs text-gray-600">
+                    <span className="text-gray-400 w-16 shrink-0">支払い</span>
+                    <span>{paymentMethods.join("・")}</span>
+                  </div>
+                )}
+                {serviceCharge && (
+                  <div className="flex items-center gap-2 text-xs text-gray-600">
+                    <span className="text-gray-400 w-16 shrink-0">サービス料</span>
+                    <span>{serviceCharge}</span>
+                  </div>
+                )}
+                {totalSeats && (
+                  <div className="flex items-center gap-2 text-xs text-gray-600">
+                    <span className="text-gray-400 w-16 shrink-0">席数</span>
+                    <span>{totalSeats}席</span>
+                  </div>
+                )}
+                {privateLabel && (
+                  <div className="flex items-center gap-2 text-xs text-gray-600">
+                    <span className="text-gray-400 w-16 shrink-0">個室</span>
+                    <span>{privateLabel}</span>
+                  </div>
+                )}
+                {rentalAvailable && (
+                  <div className="flex items-center gap-2 text-xs text-gray-600">
+                    <span className="text-gray-400 w-16 shrink-0">貸切</span>
+                    <span>対応可</span>
+                  </div>
+                )}
+                {smokingLabel && (
+                  <div className="flex items-center gap-2 text-xs text-gray-600">
+                    <span className="text-gray-400 w-16 shrink-0">喫煙</span>
+                    <span>{smokingLabel}</span>
+                  </div>
+                )}
+                {parkingInfo && (
+                  <div className="flex items-center gap-2 text-xs text-gray-600">
+                    <span className="text-gray-400 w-16 shrink-0">駐車場</span>
+                    <span>{parkingInfo}</span>
+                  </div>
+                )}
+                {openingDate && (
+                  <div className="flex items-center gap-2 text-xs text-gray-600">
+                    <span className="text-gray-400 w-16 shrink-0">開業</span>
+                    <span>{openingDate}</span>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
+          {/* SNS・ウェブサイトリンク */}
+          {(() => {
+            const websiteUrl = shop.website_url;
+            const instagramUrl = typeof (shop as Record<string, unknown>).instagram_url === "string" ? (shop as Record<string, unknown>).instagram_url as string : null;
+            const tabelogUrl = shop.tabelog_url;
+            const gmbUrl = shop.gmb_url;
+            if (!websiteUrl && !instagramUrl && !tabelogUrl && !gmbUrl) return null;
+            return (
+              <div className="mt-2 flex flex-wrap gap-2">
+                {websiteUrl ? (
+                  <a
+                    href={websiteUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 rounded-full border border-gray-200 px-3 py-1 text-xs text-gray-600 hover:bg-gray-50 transition-colors"
+                  >
+                    <Globe className="h-3 w-3" />
+                    ホームページ
+                    <ExternalLink className="h-2.5 w-2.5" />
+                  </a>
+                ) : null}
+                {instagramUrl ? (
+                  <a
+                    href={instagramUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 rounded-full border border-pink-200 bg-gradient-to-r from-pink-50 to-purple-50 px-3 py-1 text-xs text-pink-600 hover:from-pink-100 hover:to-purple-100 transition-colors"
+                  >
+                    📷 Instagram
+                    <ExternalLink className="h-2.5 w-2.5" />
+                  </a>
+                ) : null}
+                {tabelogUrl ? (
+                  <a
+                    href={tabelogUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 rounded-full border border-orange-200 bg-orange-50 px-3 py-1 text-xs text-orange-600 hover:bg-orange-100 transition-colors"
+                  >
+                    🍽 食べログ
+                    <ExternalLink className="h-2.5 w-2.5" />
+                  </a>
+                ) : null}
+                {gmbUrl ? (
+                  <a
+                    href={gmbUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs text-blue-600 hover:bg-blue-100 transition-colors"
+                  >
+                    📍 Googleマップ
+                    <ExternalLink className="h-2.5 w-2.5" />
+                  </a>
+                ) : null}
+              </div>
+            );
+          })()}
 
           {/* Fan count - qualitative */}
           {fanCount > 0 && (
@@ -985,7 +1161,6 @@ export default function ShopDetailPage() {
           </div>
         )}
       </section>
-      )}
 
       {/* 予約打診（インライン: 送信済み or フォーム展開時のみ表示） */}
       {(reservationSent || showReservationForm) && (

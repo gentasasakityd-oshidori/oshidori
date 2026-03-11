@@ -21,6 +21,11 @@ import {
   Mail,
   Instagram,
   MessageCircle,
+  Wallet,
+  Users,
+  Car,
+  Cigarette,
+  CalendarDays,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -35,7 +40,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { PREFECTURES, CATEGORIES } from "@/lib/constants";
+import { PREFECTURES, CATEGORIES, PAYMENT_METHODS, SMOKING_POLICIES, PRIVATE_ROOM_OPTIONS } from "@/lib/constants";
 import { toast } from "sonner";
 
 // ────────────────────────────────────────────
@@ -63,6 +68,17 @@ type ShopData = {
   instagram_url?: string | null;
   x_url?: string | null;
   line_url?: string | null;
+  // 詳細情報（オプション）
+  budget_lunch?: string | null;
+  budget_dinner?: string | null;
+  payment_methods?: string[] | null;
+  service_charge?: string | null;
+  total_seats?: number | null;
+  private_rooms?: string | null;
+  rental_available?: boolean | null;
+  smoking_policy?: string | null;
+  parking?: string | null;
+  opening_date?: string | null;
 };
 
 type HoursData = {
@@ -871,6 +887,17 @@ function useShopForm(initial: {
   instagramUrl: string;
   xUrl: string;
   lineUrl: string;
+  // 詳細情報（オプション）
+  budgetLunch: string;
+  budgetDinner: string;
+  paymentMethods: string[];
+  serviceCharge: string;
+  totalSeats: string;
+  privateRooms: string;
+  rentalAvailable: boolean;
+  smokingPolicy: string;
+  parking: string;
+  openingDate: string;
 }) {
   const [name, setName] = useState(initial.name);
   const [ownerName, setOwnerName] = useState(initial.ownerName);
@@ -893,6 +920,17 @@ function useShopForm(initial: {
   const [instagramUrl, setInstagramUrl] = useState(initial.instagramUrl);
   const [xUrl, setXUrl] = useState(initial.xUrl);
   const [lineUrl, setLineUrl] = useState(initial.lineUrl);
+  // 詳細情報（オプション）
+  const [budgetLunch, setBudgetLunch] = useState(initial.budgetLunch);
+  const [budgetDinner, setBudgetDinner] = useState(initial.budgetDinner);
+  const [paymentMethods, setPaymentMethods] = useState<string[]>(initial.paymentMethods);
+  const [serviceCharge, setServiceCharge] = useState(initial.serviceCharge);
+  const [totalSeats, setTotalSeats] = useState(initial.totalSeats);
+  const [privateRooms, setPrivateRooms] = useState(initial.privateRooms);
+  const [rentalAvailable, setRentalAvailable] = useState(initial.rentalAvailable);
+  const [smokingPolicy, setSmokingPolicy] = useState(initial.smokingPolicy);
+  const [parking, setParking] = useState(initial.parking);
+  const [openingDate, setOpeningDate] = useState(initial.openingDate);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   const fullAddress = [addrPref, addrCity, addrStreet, addrBuilding]
@@ -1006,6 +1044,16 @@ function useShopForm(initial: {
     instagramUrl, setInstagramUrl,
     xUrl, setXUrl,
     lineUrl, setLineUrl,
+    budgetLunch, setBudgetLunch,
+    budgetDinner, setBudgetDinner,
+    paymentMethods, setPaymentMethods,
+    serviceCharge, setServiceCharge,
+    totalSeats, setTotalSeats,
+    privateRooms, setPrivateRooms,
+    rentalAvailable, setRentalAvailable,
+    smokingPolicy, setSmokingPolicy,
+    parking, setParking,
+    openingDate, setOpeningDate,
     fieldErrors, setFieldErrors,
     fullAddress, fullPhone, hoursJson, holidaysJson,
     validateAll,
@@ -1047,7 +1095,214 @@ function buildSubmitData(
     latitude: geoData?.lat || null,
     longitude: geoData?.lng || null,
     walking_minutes: geoData?.walkMinutes || null,
+    // 詳細情報（オプション）
+    budget_lunch: form.budgetLunch.trim() || null,
+    budget_dinner: form.budgetDinner.trim() || null,
+    payment_methods: form.paymentMethods.length > 0 ? form.paymentMethods : null,
+    service_charge: form.serviceCharge.trim() || null,
+    total_seats: form.totalSeats ? parseInt(form.totalSeats, 10) || null : null,
+    private_rooms: form.privateRooms || null,
+    rental_available: form.rentalAvailable,
+    smoking_policy: form.smokingPolicy || null,
+    parking: form.parking.trim() || null,
+    opening_date: form.openingDate.trim() || null,
   };
+}
+
+// ────────────────────────────────────────────
+// 店舗詳細情報（オプション）フィールド
+// ────────────────────────────────────────────
+function ShopDetailFields({
+  form,
+}: {
+  form: ReturnType<typeof useShopForm>;
+}) {
+  function togglePaymentMethod(method: string) {
+    if (form.paymentMethods.includes(method)) {
+      form.setPaymentMethods(form.paymentMethods.filter((m) => m !== method));
+    } else {
+      form.setPaymentMethods([...form.paymentMethods, method]);
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Info className="h-4 w-4 text-primary" />
+          店舗詳細情報
+          <Badge variant="secondary" className="text-[10px]">任意</Badge>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-5">
+        <p className="text-xs text-muted-foreground">
+          お客様がお店を探すときの参考になります。後からいつでも変更できます。
+        </p>
+
+        {/* 予算 */}
+        <div className="space-y-3">
+          <Label className="flex items-center gap-1.5">
+            <Wallet className="h-3.5 w-3.5" />
+            予算（税込目安）
+          </Label>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <label className="text-xs text-muted-foreground">ランチ</label>
+              <Input
+                value={form.budgetLunch}
+                onChange={(e) => form.setBudgetLunch(e.target.value)}
+                placeholder="例: 1,000〜1,500円"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs text-muted-foreground">ディナー</label>
+              <Input
+                value={form.budgetDinner}
+                onChange={(e) => form.setBudgetDinner(e.target.value)}
+                placeholder="例: 3,000〜5,000円"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* 支払い方法 */}
+        <div className="space-y-2">
+          <Label className="flex items-center gap-1.5">
+            <Wallet className="h-3.5 w-3.5" />
+            支払い方法
+          </Label>
+          <div className="flex flex-wrap gap-2">
+            {PAYMENT_METHODS.map((method) => {
+              const isSelected = form.paymentMethods.includes(method);
+              return (
+                <button
+                  key={method}
+                  type="button"
+                  onClick={() => togglePaymentMethod(method)}
+                  className={`rounded-full border px-3 py-1.5 text-sm transition-colors ${
+                    isSelected
+                      ? "border-primary bg-primary text-white"
+                      : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
+                  }`}
+                >
+                  {method}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* サービス料 */}
+        <div className="space-y-1.5">
+          <Label>サービス料</Label>
+          <Input
+            value={form.serviceCharge}
+            onChange={(e) => form.setServiceCharge(e.target.value)}
+            placeholder="例: なし / 10% / ランチなし・ディナー10%"
+          />
+        </div>
+
+        {/* 席数 */}
+        <div className="space-y-1.5">
+          <Label className="flex items-center gap-1.5">
+            <Users className="h-3.5 w-3.5" />
+            席数
+          </Label>
+          <div className="flex items-center gap-2">
+            <Input
+              value={form.totalSeats}
+              onChange={(e) => form.setTotalSeats(e.target.value.replace(/\D/g, ""))}
+              placeholder="例: 20"
+              inputMode="numeric"
+              className="w-24"
+            />
+            <span className="text-sm text-muted-foreground">席</span>
+          </div>
+        </div>
+
+        {/* 個室 */}
+        <div className="space-y-2">
+          <Label>個室</Label>
+          <div className="flex flex-wrap gap-2">
+            {PRIVATE_ROOM_OPTIONS.map((opt) => (
+              <label key={opt.value} className="flex items-center gap-1.5">
+                <input
+                  type="radio"
+                  name="private-rooms"
+                  checked={form.privateRooms === opt.value}
+                  onChange={() => form.setPrivateRooms(opt.value)}
+                  className="h-4 w-4 text-primary accent-[#E06A4E]"
+                />
+                <span className="text-sm">{opt.label}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+
+        {/* 貸切 */}
+        <div className="space-y-2">
+          <Label>貸切</Label>
+          <label className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={form.rentalAvailable}
+              onChange={(e) => form.setRentalAvailable(e.target.checked)}
+              className="h-4 w-4 rounded border-gray-300 text-primary accent-[#E06A4E]"
+            />
+            <span className="text-sm">貸切対応可能</span>
+          </label>
+        </div>
+
+        {/* 喫煙 */}
+        <div className="space-y-2">
+          <Label className="flex items-center gap-1.5">
+            <Cigarette className="h-3.5 w-3.5" />
+            喫煙
+          </Label>
+          <div className="flex flex-wrap gap-2">
+            {SMOKING_POLICIES.map((opt) => (
+              <label key={opt.value} className="flex items-center gap-1.5">
+                <input
+                  type="radio"
+                  name="smoking-policy"
+                  checked={form.smokingPolicy === opt.value}
+                  onChange={() => form.setSmokingPolicy(opt.value)}
+                  className="h-4 w-4 text-primary accent-[#E06A4E]"
+                />
+                <span className="text-sm">{opt.label}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+
+        {/* 駐車場 */}
+        <div className="space-y-1.5">
+          <Label className="flex items-center gap-1.5">
+            <Car className="h-3.5 w-3.5" />
+            駐車場
+          </Label>
+          <Input
+            value={form.parking}
+            onChange={(e) => form.setParking(e.target.value)}
+            placeholder="例: なし / 3台 / 近隣にコインパーキングあり"
+          />
+        </div>
+
+        {/* 開業日 */}
+        <div className="space-y-1.5">
+          <Label className="flex items-center gap-1.5">
+            <CalendarDays className="h-3.5 w-3.5" />
+            開業日
+          </Label>
+          <Input
+            value={form.openingDate}
+            onChange={(e) => form.setOpeningDate(e.target.value)}
+            placeholder="例: 2020年4月 / 2015年"
+          />
+        </div>
+      </CardContent>
+    </Card>
+  );
 }
 
 // ────────────────────────────────────────────
@@ -1318,6 +1573,16 @@ function ShopRegistrationForm({
     instagramUrl: "",
     xUrl: "",
     lineUrl: "",
+    budgetLunch: "",
+    budgetDinner: "",
+    paymentMethods: [],
+    serviceCharge: "",
+    totalSeats: "",
+    privateRooms: "",
+    rentalAvailable: false,
+    smokingPolicy: "",
+    parking: "",
+    openingDate: "",
   });
 
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -1605,6 +1870,17 @@ export default function ShopInfoPage() {
       instagramUrl: s.instagram_url ?? "",
       xUrl: s.x_url ?? "",
       lineUrl: s.line_url ?? "",
+      // 詳細情報（オプション）
+      budgetLunch: s.budget_lunch ?? "",
+      budgetDinner: s.budget_dinner ?? "",
+      paymentMethods: Array.isArray(s.payment_methods) ? s.payment_methods : [],
+      serviceCharge: s.service_charge ?? "",
+      totalSeats: s.total_seats != null ? String(s.total_seats) : "",
+      privateRooms: s.private_rooms ?? "",
+      rentalAvailable: s.rental_available ?? false,
+      smokingPolicy: s.smoking_policy ?? "",
+      parking: s.parking ?? "",
+      openingDate: s.opening_date ?? "",
     };
   }
 
@@ -1950,6 +2226,9 @@ function ShopEditForm({
           />
         </CardContent>
       </Card>
+
+      {/* 店舗詳細情報（オプション） */}
+      <ShopDetailFields form={form} />
 
       {/* 外部ページ・SNS */}
       <ExternalLinksFields form={form} />

@@ -215,6 +215,30 @@ export const EMOTION_TAGS = [
 
 export type EmotionTagId = (typeof EMOTION_TAGS)[number]["id"];
 
+// 支払い方法（食べログ風チェックボックス用）
+export const PAYMENT_METHODS = [
+  "現金",
+  "クレジットカード",
+  "電子マネー",
+  "QRコード決済",
+  "交通系IC",
+] as const;
+
+// 喫煙ポリシー選択肢
+export const SMOKING_POLICIES = [
+  { value: "no_smoking", label: "全面禁煙" },
+  { value: "smoking_area", label: "分煙（喫煙席あり）" },
+  { value: "smoking_allowed", label: "喫煙可" },
+  { value: "e_cigarette_only", label: "加熱式タバコのみ可" },
+] as const;
+
+// 個室タイプ選択肢
+export const PRIVATE_ROOM_OPTIONS = [
+  { value: "none", label: "なし" },
+  { value: "available", label: "あり" },
+  { value: "semi_private", label: "半個室あり" },
+] as const;
+
 // PoC期間中の無料モードフラグ
 // true: ファンクラブ参加が無料（推し登録 = ファンクラブ参加）
 // false: 通常の有料ファンクラブモード
