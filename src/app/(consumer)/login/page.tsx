@@ -83,6 +83,7 @@ function LoginForm() {
 
     try {
       const supabase = createClient();
+      const next = searchParams.get("next") || "/home";
       const { error } = await supabase.auth.signUp({
         email: registerEmail,
         password: registerPassword,
@@ -90,6 +91,7 @@ function LoginForm() {
           data: {
             nickname: registerNickname,
           },
+          emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`,
         },
       });
 
@@ -123,10 +125,11 @@ function LoginForm() {
   async function handleGoogleLogin() {
     setError(null);
     const supabase = createClient();
+    const next = searchParams.get("next") || "/home";
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
+        redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`,
       },
     });
     if (error) {

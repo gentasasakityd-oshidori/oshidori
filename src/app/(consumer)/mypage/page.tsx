@@ -17,6 +17,8 @@ import {
   HelpCircle,
   FileText,
   Sparkles,
+  Trash2,
+  AlertTriangle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -40,6 +42,9 @@ export default function MyPage() {
   const [editNickname, setEditNickname] = useState("");
   const [showMoodTagSelector, setShowMoodTagSelector] = useState(false);
   const [moodTags, setMoodTags] = useState<string[]>([]);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
     async function loadData() {
@@ -342,6 +347,89 @@ export default function MyPage() {
             <LogOut className="mr-2 h-4 w-4" />
             ログアウト
           </Button>
+
+          {/* アカウント削除 */}
+          {!showDeleteConfirm ? (
+            <button
+              onClick={() => setShowDeleteConfirm(true)}
+              className="mt-2 w-full text-center text-xs text-muted-foreground/60 hover:text-destructive transition-colors"
+            >
+              アカウントを削除する
+            </button>
+          ) : (
+            <div className="mt-3 rounded-lg border border-destructive/30 bg-destructive/5 p-4 space-y-3">
+              <div className="flex items-start gap-2">
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+                <div className="text-sm">
+                  <p className="font-medium text-destructive">アカウント削除は取り消せません</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    推し店・共感履歴・来店記録など、すべてのデータが削除されます。
+                  </p>
+                </div>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground mb-1">
+                  確認のため「削除」と入力してください
+                </p>
+                <input
+                  type="text"
+                  value={deleteConfirmText}
+                  onChange={(e) => setDeleteConfirmText(e.target.value)}
+                  placeholder="削除"
+                  className="w-full rounded border px-3 py-2 text-sm"
+                />
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="flex-1"
+                  onClick={() => {
+                    setShowDeleteConfirm(false);
+                    setDeleteConfirmText("");
+                  }}
+                >
+                  キャンセル
+                </Button>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  className="flex-1"
+                  disabled={deleteConfirmText !== "削除" || isDeleting}
+                  onClick={async () => {
+                    setIsDeleting(true);
+                    try {
+                      const res = await fetch("/api/account/delete", { method: "DELETE" });
+                      const data = await res.json();
+                      if (res.ok) {
+                        const supabase = createClient();
+                        await supabase.auth.signOut();
+                        router.push("/login");
+                      } else {
+                        alert(data.error || "削除に失敗しました");
+                      }
+                    } catch {
+                      alert("エラーが発生しました");
+                    } finally {
+                      setIsDeleting(false);
+                    }
+                  }}
+                >
+                  {isDeleting ? (
+                    <>
+                      <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                      削除中...
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 className="mr-1 h-3 w-3" />
+                      アカウント削除
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
       </section>
 
