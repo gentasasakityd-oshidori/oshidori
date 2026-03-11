@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { Eye, EyeOff, Heart, BookOpen, Loader2, ExternalLink, Activity, RefreshCw, AlertTriangle, Play, ChevronRight, Clock, CheckCircle2 } from "lucide-react";
+import { Eye, EyeOff, Heart, BookOpen, Loader2, ExternalLink, Activity, RefreshCw, AlertTriangle, Play, ChevronRight, Clock, CheckCircle2, Search, FileText, UserPlus, ThumbsUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -40,6 +40,8 @@ export default function AdminShopsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [retryingId, setRetryingId] = useState<string | null>(null);
+  const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
+  const [actionMessage, setActionMessage] = useState<{ shopId: string; text: string; type: "success" | "error" } | null>(null);
   const [filter, setFilter] = useState<FilterTab>("all");
 
   useEffect(() => {
@@ -98,6 +100,81 @@ export default function AdminShopsPage() {
     }
     setRetryingId(null);
   }
+
+  // 汎用オンボーディングアクション実行
+  async function handleOnboardingAction(shopId: string, action: string, body?: Record<string, unknown>) {
+    setActionLoadingId(shopId);
+    setActionMessage(null);
+    try {
+      const res = await fetch(`/api/admin/onboarding/${shopId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action, ...body }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setActionMessage({ shopId, text: data.message || "完了", type: "success" });
+        await loadShops();
+      } else {
+        setActionMessage({ shopId, text: data.error || "エラーが発生しました", type: "error" });
+      }
+    } catch {
+      setActionMessage({ shopId, text: "通信エラー", type: "error" });
+    }
+    setActionLoadingId(null);
+    // メッセージを3秒後にクリア
+    setTimeout(() => setActionMessage((prev) => prev?.shopId === shopId ? null : prev), 3000);
+  }
+
+  // フェーズに応じたクイックアクションボタン定義
+  type QuickAction = { label: string; icon: React.ReactNode; action: string; body?: Record<string, unknown>; variant?: "default" | "outline"; className?: string };
+  const getQuickActions = (phase: string): QuickAction[] => {
+    switch (phase) {
+      case "application_pending":
+        return [{
+          label: "承認",
+          icon: <ThumbsUp className="h-3 w-3" />,
+          action: "approve",
+          variant: "default",
+          className: "bg-green-600 hover:bg-green-700",
+        }];
+      case "approved":
+        return [{
+          label: "リサーチ開始",
+          icon: <Search className="h-3 w-3" />,
+          action: "retry_pipeline",
+          variant: "default",
+          className: "bg-blue-600 hover:bg-blue-700",
+        }];
+      case "pipeline_error":
+        return [{
+          label: "パイプライン再実行",
+          icon: <Play className="h-3 w-3" />,
+          action: "retry_pipeline",
+          variant: "outline",
+          className: "text-red-600 border-red-300 hover:bg-red-50",
+        }];
+      case "pre_research_done":
+        return [{
+          label: "設計書生成",
+          icon: <FileText className="h-3 w-3" />,
+          action: "update_phase",
+          body: { phase: "design_doc_generating" },
+          variant: "default",
+          className: "bg-blue-600 hover:bg-blue-700",
+        }];
+      case "ready_for_interview":
+        return [{
+          label: "インタビュアー割当へ",
+          icon: <UserPlus className="h-3 w-3" />,
+          action: "update_phase",
+          body: { phase: "interviewer_assigned" },
+          variant: "outline",
+        }];
+      default:
+        return [];
+    }
+  };
 
   const getPhaseInfo = (phase: string) => {
     return PHASE_METADATA[phase as OnboardingPhase] ?? {
@@ -297,6 +374,22 @@ export default function AdminShopsPage() {
                             AI処理中...
                           </div>
                         )}
+
+                        {/* パイプラインエラー詳細 */}
+                        {isError && (() => {
+                          const meta = (shop as AdminShop & { metadata?: { pipeline_error?: { message?: string; occurred_at?: string } } }).metadata;
+                          const errInfo = meta?.pipeline_error;
+                          if (!errInfo?.message) return null;
+                          return (
+                            <div className="mt-2 rounded bg-red-50 px-2 py-1.5 text-[11px] text-red-700">
+                              <p className="font-medium">エラー内容:</p>
+                              <p className="mt-0.5 break-all">{errInfo.message}</p>
+                              {errInfo.occurred_at && (
+                                <p className="mt-0.5 text-red-400">{new Date(errInfo.occurred_at).toLocaleString("ja-JP")}</p>
+                              )}
+                            </div>
+                          );
+                        })()}
                       </div>
 
                       {/* 統計情報 */}
@@ -323,21 +416,34 @@ export default function AdminShopsPage() {
 
                     {/* アクション */}
                     <div className="flex flex-col items-end gap-2 shrink-0">
-                      {isError && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="gap-1 text-red-600 border-red-300 hover:bg-red-50"
-                          onClick={() => retryPipeline(shop.id)}
-                          disabled={retryingId === shop.id}
-                        >
-                          {retryingId === shop.id ? (
-                            <Loader2 className="h-3 w-3 animate-spin" />
-                          ) : (
-                            <Play className="h-3 w-3" />
-                          )}
-                          再実行
-                        </Button>
+                      {/* オンボーディングクイックアクション */}
+                      {(() => {
+                        const quickActions = getQuickActions(phase);
+                        return quickActions.map((qa, idx) => (
+                          <Button
+                            key={idx}
+                            variant={qa.variant === "default" ? "default" : "outline"}
+                            size="sm"
+                            className={`gap-1 text-xs ${qa.className || ""}`}
+                            onClick={() => handleOnboardingAction(shop.id, qa.action, qa.body)}
+                            disabled={actionLoadingId === shop.id}
+                          >
+                            {actionLoadingId === shop.id ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : (
+                              qa.icon
+                            )}
+                            {qa.label}
+                          </Button>
+                        ));
+                      })()}
+                      {/* フィードバックメッセージ */}
+                      {actionMessage?.shopId === shop.id && (
+                        <span className={`text-[10px] font-medium ${
+                          actionMessage.type === "success" ? "text-green-600" : "text-red-600"
+                        }`}>
+                          {actionMessage.text}
+                        </span>
                       )}
                       <div className="flex items-center gap-1">
                         <Button variant="ghost" size="icon" className="h-8 w-8" asChild>

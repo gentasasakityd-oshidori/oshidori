@@ -26,18 +26,33 @@ export async function triggerPostApprovalPipeline(
     await updatePhase(supabase, shopId, "pre_research_running");
 
     // 事前調査を実行
-    const researchResult = await runPreResearch(supabase, shopId);
+    console.log(`[Pipeline] Shop ${shopId}: Starting pre-research...`);
+    let researchResult;
+    try {
+      researchResult = await runPreResearch(supabase, shopId);
+      console.log(`[Pipeline] Shop ${shopId}: Pre-research completed (report: ${researchResult.reportId})`);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      throw new Error(`事前調査でエラー: ${msg}`);
+    }
 
     // Phase: pre_research_done → design_doc_generating
     await updatePhase(supabase, shopId, "pre_research_done");
     await updatePhase(supabase, shopId, "design_doc_generating");
 
     // インタビュー設計書を生成
-    await generateInterviewDesign(
-      supabase,
-      shopId,
-      researchResult.reportId
-    );
+    console.log(`[Pipeline] Shop ${shopId}: Generating interview design...`);
+    try {
+      await generateInterviewDesign(
+        supabase,
+        shopId,
+        researchResult.reportId
+      );
+      console.log(`[Pipeline] Shop ${shopId}: Interview design completed`);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      throw new Error(`インタビュー設計書生成でエラー: ${msg}`);
+    }
 
     // Phase: ready_for_interview
     await updatePhase(supabase, shopId, "ready_for_interview");
@@ -51,13 +66,21 @@ export async function triggerPostApprovalPipeline(
     // エラー時は pipeline_error フェーズに設定し、管理画面から再実行可能にする
     try {
       await updatePhase(supabase, shopId, "pipeline_error");
-      // エラー情報をメタデータに保存
+      // エラー情報をメタデータに保存（既存metadataとマージ）
+      const { data: currentShop } = await supabase
+        .from("shops")
+        .select("metadata")
+        .eq("id", shopId)
+        .single();
+      const existingMeta = (currentShop as { metadata?: Record<string, unknown> } | null)?.metadata ?? {};
       await supabase
         .from("shops")
         .update({
           metadata: {
+            ...existingMeta,
             pipeline_error: {
               message: error instanceof Error ? error.message : String(error),
+              stack: error instanceof Error ? error.stack?.slice(0, 500) : undefined,
               occurred_at: new Date().toISOString(),
             },
           },

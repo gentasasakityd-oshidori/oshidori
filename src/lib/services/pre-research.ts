@@ -124,18 +124,37 @@ export async function runPreResearch(
   // 検証レポートの取得
   const verificationReport = researchData.verification_report as Record<string, unknown> | undefined;
 
-  // レポートを更新
-  await supabase
+  // レポートを更新（verification_reportカラムが存在しない環境にも対応）
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const updatePayload: Record<string, any> = {
+    personality_hypothesis: researchData.personality_hypothesis ?? [],
+    kodawari_hypothesis: researchData.kodawari_hypothesis ?? [],
+    episode_hypothesis: researchData.episode_hypothesis ?? [],
+    research_status: "completed",
+    completed_at: new Date().toISOString(),
+  };
+
+  // verification_reportは別途更新を試みる（カラム未追加の場合に本体更新が失敗しないよう分離）
+  const { error: updateError } = await supabase
     .from("pre_research_reports")
-    .update({
-      personality_hypothesis: researchData.personality_hypothesis ?? [],
-      kodawari_hypothesis: researchData.kodawari_hypothesis ?? [],
-      episode_hypothesis: researchData.episode_hypothesis ?? [],
-      verification_report: verificationReport ?? null,
-      research_status: "completed",
-      completed_at: new Date().toISOString(),
-    })
+    .update(updatePayload)
     .eq("id", reportId);
+
+  if (updateError) {
+    console.error(`[PreResearch] Report update error:`, updateError);
+    throw new Error(`Failed to update report: ${updateError.message}`);
+  }
+
+  // verification_reportカラムの更新（失敗しても続行）
+  if (verificationReport) {
+    const { error: vrError } = await supabase
+      .from("pre_research_reports")
+      .update({ verification_report: verificationReport })
+      .eq("id", reportId);
+    if (vrError) {
+      console.warn(`[PreResearch] verification_report update skipped:`, vrError.message);
+    }
+  }
 
   // 検証結果が「要確認」または「却下推奨」の場合、運営にメール通知
   if (verificationReport) {

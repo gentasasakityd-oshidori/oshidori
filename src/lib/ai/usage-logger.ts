@@ -1,4 +1,4 @@
-import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { createClient } from "@supabase/supabase-js";
 
 /** Model pricing (USD per 1M tokens) */
 const MODEL_PRICING: Record<string, { input: number; output: number }> = {
@@ -9,6 +9,18 @@ const MODEL_PRICING: Record<string, { input: number; output: number }> = {
   "claude-sonnet-4-20250514": { input: 3.0, output: 15.0 },
   "claude-haiku-3-5-20241022": { input: 0.8, output: 4.0 },
 };
+
+/**
+ * サービスロールクライアント生成（fire-and-forget対応）
+ * cookies()依存のcreateServerSupabaseClientはパイプライン実行時に使えないため、
+ * サービスロールキーで直接接続する
+ */
+function createUsageLogClient() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  );
+}
 
 /**
  * OpenAI APIコールの利用量をDBに記録する
@@ -29,7 +41,7 @@ export async function logApiUsage(params: {
       (params.promptTokens / 1_000_000) * pricing.input +
       (params.completionTokens / 1_000_000) * pricing.output;
 
-    const supabase = await createServerSupabaseClient();
+    const supabase = createUsageLogClient();
     await supabase.from("api_usage_logs").insert({
       endpoint: params.endpoint,
       model: params.model,
