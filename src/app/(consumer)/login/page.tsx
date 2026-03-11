@@ -241,7 +241,7 @@ function LoginForm() {
                   </Button>
 
                   <p className="text-center text-xs text-muted-foreground">
-                    <Link href="#" className="text-primary hover:underline">
+                    <Link href="/forgot-password" className="text-primary hover:underline">
                       パスワードをお忘れですか？
                     </Link>
                   </p>
@@ -419,14 +419,20 @@ function LoginForm() {
               </div>
             </div>
 
-            {/* ゲスト閲覧リンク */}
-            <div className="mt-6 text-center">
+            {/* ゲスト閲覧リンク + お問い合わせ */}
+            <div className="mt-6 space-y-2 text-center">
               <Link
                 href="/"
                 className="text-sm text-muted-foreground transition-colors hover:text-primary"
               >
                 ゲストのまま閲覧する
               </Link>
+              <p className="text-xs text-muted-foreground">
+                お困りですか？{" "}
+                <Link href="/contact" className="text-primary hover:underline">
+                  お問い合わせ
+                </Link>
+              </p>
             </div>
           </CardContent>
         </Card>

@@ -101,6 +101,15 @@ export async function PATCH(request: Request) {
       shop_area: string | null;
       applicant_name: string;
       status: string;
+      address_prefecture: string | null;
+      address_city: string | null;
+      address_street: string | null;
+      address_building: string | null;
+      phone: string | null;
+      website_url: string | null;
+      instagram_url: string | null;
+      tabelog_url: string | null;
+      gmb_url: string | null;
     };
 
     // 申請ステータスを更新
@@ -151,8 +160,19 @@ export async function PATCH(request: Request) {
         name: app.shop_name,
         owner_name: app.applicant_name,
         owner_id: app.user_id,
-        area: app.shop_area || "shibuya",
+        area: app.shop_area || app.address_prefecture || "未設定",
         category: app.shop_genre || "japanese",
+        // 申請時に入力された住所・電話をコピー
+        address_prefecture: app.address_prefecture || null,
+        address_city: app.address_city || null,
+        address_street: app.address_street || null,
+        address_building: app.address_building || null,
+        phone: app.phone || null,
+        // SNS・ウェブサイト情報をコピー
+        website_url: app.website_url || null,
+        instagram_url: app.instagram_url || null,
+        tabelog_url: app.tabelog_url || null,
+        gmb_url: app.gmb_url || null,
         is_published: false,
         onboarding_phase: "approved",
       }).select("id").single();

@@ -1,6 +1,58 @@
 import { NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
+/**
+ * GET: 既存のドラフト or 審査中申請を確認
+ */
+export async function GET() {
+  try {
+    const supabase = await createServerSupabaseClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      return NextResponse.json({ error: "認証が必要です" }, { status: 401 });
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const db = supabase as any;
+
+    // ドラフト申請を取得
+    const { data: draft } = await db
+      .from("shop_role_applications")
+      .select("*")
+      .eq("user_id", user.id)
+      .eq("status", "draft")
+      .maybeSingle();
+
+    // 審査中申請を確認
+    const { data: pending } = await db
+      .from("shop_role_applications")
+      .select("id")
+      .eq("user_id", user.id)
+      .eq("status", "pending")
+      .maybeSingle();
+
+    return NextResponse.json({
+      draft: draft || null,
+      hasPending: !!pending,
+    });
+  } catch {
+    return NextResponse.json(
+      { error: "サーバーエラーが発生しました" },
+      { status: 500 }
+    );
+  }
+}
+
+/**
+ * POST: ステップごとの保存 or 最終送信
+ *
+ * - step=1: 基本情報を保存（ドラフト作成/更新）
+ * - step=2: 所在地・SNS情報を保存（ドラフト更新）
+ * - step=3 or stepなし: 最終送信（pending に変更）
+ */
 export async function POST(request: Request) {
   try {
     const supabase = await createServerSupabaseClient();
@@ -13,8 +65,173 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const { shop_name, shop_genre, shop_area, applicant_name, applicant_role, message } = body;
+    const {
+      step,
+      shop_name,
+      shop_genre,
+      shop_area,
+      applicant_name,
+      applicant_role,
+      message,
+      address_prefecture,
+      address_city,
+      address_street,
+      address_building,
+      phone,
+      website_url,
+      instagram_url,
+      tabelog_url,
+      gmb_url,
+    } = body;
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const db = supabase as any;
+
+    // ======= ステップ1: 基本情報保存 =======
+    if (step === 1) {
+      if (!shop_name || !applicant_name) {
+        return NextResponse.json(
+          { error: "店名と申請者名は必須です" },
+          { status: 400 }
+        );
+      }
+
+      // 審査中の申請がないか確認
+      const { data: pending } = await db
+        .from("shop_role_applications")
+        .select("id")
+        .eq("user_id", user.id)
+        .eq("status", "pending")
+        .maybeSingle();
+
+      if (pending) {
+        return NextResponse.json(
+          { error: "審査中の申請があります。審査結果をお待ちください。" },
+          { status: 409 }
+        );
+      }
+
+      // 既存ドラフトを確認
+      const { data: existing } = await db
+        .from("shop_role_applications")
+        .select("id")
+        .eq("user_id", user.id)
+        .eq("status", "draft")
+        .maybeSingle();
+
+      if (existing) {
+        // 既存ドラフトを更新
+        const { error: updateError } = await db
+          .from("shop_role_applications")
+          .update({
+            shop_name,
+            shop_genre: shop_genre || null,
+            applicant_name,
+            applicant_role: applicant_role || null,
+            message: message || null,
+            application_step: 1,
+          })
+          .eq("id", existing.id);
+
+        if (updateError) {
+          return NextResponse.json({ error: "保存に失敗しました" }, { status: 500 });
+        }
+        return NextResponse.json({ success: true, draft_id: existing.id });
+      }
+
+      // 新規ドラフト作成
+      const { data: newDraft, error: insertError } = await db
+        .from("shop_role_applications")
+        .insert({
+          user_id: user.id,
+          shop_name,
+          shop_genre: shop_genre || null,
+          applicant_name,
+          applicant_role: applicant_role || null,
+          message: message || null,
+          status: "draft",
+          application_step: 1,
+        })
+        .select("id")
+        .single();
+
+      if (insertError) {
+        return NextResponse.json({ error: "保存に失敗しました" }, { status: 500 });
+      }
+      return NextResponse.json({ success: true, draft_id: newDraft.id });
+    }
+
+    // ======= ステップ2: 所在地・SNS保存 =======
+    if (step === 2) {
+      const { data: existing } = await db
+        .from("shop_role_applications")
+        .select("id")
+        .eq("user_id", user.id)
+        .eq("status", "draft")
+        .maybeSingle();
+
+      if (!existing) {
+        return NextResponse.json(
+          { error: "下書きが見つかりません" },
+          { status: 404 }
+        );
+      }
+
+      const { error: updateError } = await db
+        .from("shop_role_applications")
+        .update({
+          address_prefecture: address_prefecture || null,
+          address_city: address_city || null,
+          address_street: address_street || null,
+          address_building: address_building || null,
+          phone: phone || null,
+          shop_area: address_prefecture || null,
+          website_url: website_url || null,
+          instagram_url: instagram_url || null,
+          tabelog_url: tabelog_url || null,
+          gmb_url: gmb_url || null,
+          application_step: 2,
+        })
+        .eq("id", existing.id);
+
+      if (updateError) {
+        return NextResponse.json({ error: "保存に失敗しました" }, { status: 500 });
+      }
+      return NextResponse.json({ success: true, draft_id: existing.id });
+    }
+
+    // ======= ステップ3 or レガシー: 最終送信 =======
+    if (step === 3) {
+      // ドラフトをpendingに変更
+      const { data: existing } = await db
+        .from("shop_role_applications")
+        .select("id")
+        .eq("user_id", user.id)
+        .eq("status", "draft")
+        .maybeSingle();
+
+      if (!existing) {
+        return NextResponse.json(
+          { error: "下書きが見つかりません" },
+          { status: 404 }
+        );
+      }
+
+      const { error: updateError } = await db
+        .from("shop_role_applications")
+        .update({
+          status: "pending",
+          application_step: 3,
+        })
+        .eq("id", existing.id);
+
+      if (updateError) {
+        return NextResponse.json({ error: "送信に失敗しました" }, { status: 500 });
+      }
+      return NextResponse.json({ success: true });
+    }
+
+    // ======= レガシー（stepなし）: 一括送信 =======
     if (!shop_name || !applicant_name) {
       return NextResponse.json(
         { error: "店名と申請者名は必須です" },
@@ -22,8 +239,19 @@ export async function POST(request: Request) {
       );
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const db = supabase as any;
+    if (!address_prefecture || !address_city || !address_street) {
+      return NextResponse.json(
+        { error: "都道府県・市区町村・町名番地は必須です" },
+        { status: 400 }
+      );
+    }
+
+    if (!phone) {
+      return NextResponse.json(
+        { error: "電話番号は必須です" },
+        { status: 400 }
+      );
+    }
 
     // 既存の未審査申請がないか確認
     const { data: existing } = await db
@@ -48,6 +276,16 @@ export async function POST(request: Request) {
       applicant_name,
       applicant_role: applicant_role || null,
       message: message || null,
+      address_prefecture: address_prefecture || null,
+      address_city: address_city || null,
+      address_street: address_street || null,
+      address_building: address_building || null,
+      phone: phone || null,
+      website_url: website_url || null,
+      instagram_url: instagram_url || null,
+      tabelog_url: tabelog_url || null,
+      gmb_url: gmb_url || null,
+      application_step: 3,
     });
 
     if (error) {

@@ -9,15 +9,11 @@ import {
   Heart,
   Handshake,
   Sparkles,
-  Star,
-  Quote,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { HeroSection } from "@/components/lp/hero-section";
 import { ScrollFadeIn } from "@/components/lp/scroll-fade-in";
-import { getPublishedShops } from "@/lib/queries/shops";
 
 export const metadata: Metadata = {
   title: "推し店を見つけよう | オシドリ",
@@ -35,40 +31,6 @@ export const metadata: Metadata = {
   },
 };
 
-/* ----- UGC「推し声」仮データ ----- */
-const OSHI_VOICES = [
-  {
-    name: "ゆうこ",
-    shop: "炭火焼き鳥 とり源",
-    comment: "ストーリーを読んで、店主のこだわりに感動。通い始めたらもう止まらない！",
-    months: 5,
-  },
-  {
-    name: "たくみ",
-    shop: "手打ち蕎麦 あさひ",
-    comment: "蕎麦粉へのこだわりを知ったら、味が全然違って感じた。毎週通ってます。",
-    months: 3,
-  },
-  {
-    name: "まり",
-    shop: "ナチュラルワイン食堂 hinata",
-    comment: "評価サイトにはない小さなお店。ストーリーで出会えてよかった。",
-    months: 8,
-  },
-  {
-    name: "けんた",
-    shop: "らーめん一心",
-    comment: "スープを仕込む朝4時の話を読んで、もうここ以外考えられなくなった。",
-    months: 2,
-  },
-  {
-    name: "あいり",
-    shop: "創作フレンチ Lumière",
-    comment: "シェフの修行時代の話に共感して推し店に。常連として認識してもらえるの嬉しい。",
-    months: 6,
-  },
-];
-
 /* ----- Before/After データ ----- */
 const BEFORE_AFTER = [
   {
@@ -85,13 +47,7 @@ const BEFORE_AFTER = [
   },
 ];
 
-export default async function ConsumerLpPage() {
-  /* 公開済み店舗を取得（ストーリー体験セクション用） */
-  const shops = await getPublishedShops();
-  const shopsWithStory = shops
-    .filter((s) => s.stories.length > 0)
-    .slice(0, 3);
-
+export default function ConsumerLpPage() {
   return (
     <>
       {/* ──────────────────────────────────────
@@ -126,9 +82,9 @@ export default async function ConsumerLpPage() {
       />
 
       {/* ──────────────────────────────────────
-          S2. 共感 — 「あるある」問題提起
+          S2. 共感 — 「あるある」問題提起（コンパクト版）
       ────────────────────────────────────── */}
-      <section className="px-4 py-16 md:py-20">
+      <section className="px-4 py-12 md:py-16">
         <div className="mx-auto max-w-3xl text-center">
           <ScrollFadeIn>
             <h2 className="text-balance font-heading text-2xl font-bold md:text-3xl">
@@ -136,49 +92,26 @@ export default async function ConsumerLpPage() {
             </h2>
           </ScrollFadeIn>
 
-          <div className="mt-8 grid gap-3 md:grid-cols-3">
-            {[
-              {
-                icon: Search,
-                text: "評価サイトで3.5以上を探すけど、通い続けているお店は数えるほど",
-              },
-              {
-                icon: Smartphone,
-                text: "SNSで話題のお店に行ったけど、なんか違った",
-              },
-              {
-                icon: HelpCircle,
-                text: "本当に自分に合うお店って、どうやって見つけるの？",
-              },
-            ].map((item, i) => (
-              <ScrollFadeIn key={i} delay={i * 120} direction="up">
-                <Card className="h-full border-border/40 bg-card shadow-sm transition-shadow hover:shadow-md">
-                  <CardContent className="flex items-center gap-3 px-4 py-3 md:flex-col md:items-center md:gap-3 md:p-5 md:text-center">
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 md:h-12 md:w-12">
-                      <item.icon className="h-5 w-5 text-primary md:h-6 md:w-6" />
-                    </div>
-                    <p className="text-pretty text-sm leading-snug text-foreground">
-                      {item.text}
-                    </p>
-                  </CardContent>
-                </Card>
-              </ScrollFadeIn>
-            ))}
-          </div>
-
-          {/* 共感ビジュアル */}
-          <ScrollFadeIn delay={300}>
-            <div className="mx-auto mt-8 max-w-md overflow-hidden rounded-2xl">
-              <img
-                src="/images/lp/empathy-visual.webp"
-                alt="スマホで飲食店を探すけれど、しっくりこない様子"
-                className="h-auto w-full object-cover"
-              />
+          <ScrollFadeIn delay={100}>
+            <div className="mt-6 space-y-2">
+              {[
+                { icon: Search, text: "評価サイトで探すけど、通い続けるお店は見つからない" },
+                { icon: Smartphone, text: "SNSで話題のお店に行ったけど、なんか違った" },
+                { icon: HelpCircle, text: "本当に自分に合うお店って、どうやって見つけるの？" },
+              ].map((item, i) => (
+                <div
+                  key={i}
+                  className="flex items-center gap-3 rounded-lg border border-border/30 bg-card px-4 py-2.5 text-left shadow-sm"
+                >
+                  <item.icon className="h-5 w-5 shrink-0 text-primary/60" />
+                  <p className="whitespace-nowrap text-base text-foreground">{item.text}</p>
+                </div>
+              ))}
             </div>
           </ScrollFadeIn>
 
-          <ScrollFadeIn delay={400}>
-            <p className="text-balance mt-8 text-lg font-medium text-foreground md:text-xl">
+          <ScrollFadeIn delay={300}>
+            <p className="text-balance mt-6 text-lg font-medium text-foreground md:text-xl">
               大切にしたいのは、点数じゃなく
               <span className="text-primary">&ldquo;共感&rdquo;</span>。
             </p>
@@ -189,11 +122,12 @@ export default async function ConsumerLpPage() {
       {/* ──────────────────────────────────────
           S3. ソリューション — オシドリとは
       ────────────────────────────────────── */}
-      <section className="bg-warm px-4 py-16 md:py-20">
+      <section className="bg-warm px-4 py-12 md:py-16">
         <div className="mx-auto max-w-4xl text-center">
           <ScrollFadeIn>
             <h2 className="text-balance font-heading text-2xl font-bold md:text-3xl">
               オシドリは、
+              <br className="sm:hidden" />
               <span className="text-primary">&ldquo;想い&rdquo;</span>
               でお店と出会い、
               <br className="sm:hidden" />
@@ -201,7 +135,7 @@ export default async function ConsumerLpPage() {
             </h2>
           </ScrollFadeIn>
 
-          <div className="mt-10 grid gap-6 md:grid-cols-3">
+          <div className="mt-8 grid gap-4 md:grid-cols-3">
             {[
               {
                 icon: BookOpen,
@@ -227,21 +161,21 @@ export default async function ConsumerLpPage() {
             ].map((item, i) => (
               <ScrollFadeIn key={i} delay={i * 120} direction="up">
                 <Card className="h-full overflow-hidden border-none bg-white shadow-md">
-                  <div className="aspect-[4/3] overflow-hidden bg-muted">
+                  <div className="aspect-[3/2] overflow-hidden bg-muted">
                     <img
                       src={item.image}
                       alt={item.imageAlt}
                       className="h-full w-full object-cover"
                     />
                   </div>
-                  <CardContent className="flex flex-col items-center gap-3 p-5 text-center">
-                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10">
+                  <CardContent className="flex flex-col items-center gap-2 p-4 text-center">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
                       <item.icon className="h-6 w-6 text-primary" />
                     </div>
                     <h3 className="font-heading text-lg font-bold">
                       {item.title}
                     </h3>
-                    <p className="text-pretty text-sm leading-relaxed text-muted-foreground">
+                    <p className="text-pretty text-sm leading-snug text-muted-foreground">
                       {item.desc}
                     </p>
                   </CardContent>
@@ -253,149 +187,43 @@ export default async function ConsumerLpPage() {
       </section>
 
       {/* ──────────────────────────────────────
-          S4. ストーリー体験 — 実際のお店紹介
+          S4. ストーリー体験 — お店の魅力
       ────────────────────────────────────── */}
-      <section className="px-4 py-16 md:py-20">
-        <div className="mx-auto max-w-5xl">
+      <section className="px-4 py-12 md:py-16">
+        <div className="mx-auto max-w-4xl">
           <ScrollFadeIn>
             <h2 className="text-balance text-center font-heading text-2xl font-bold md:text-3xl">
               お店の裏側には、
               <br className="sm:hidden" />
-              必ず物語がある。
+              必ずストーリーがある。
             </h2>
           </ScrollFadeIn>
 
-          {shopsWithStory.length > 0 ? (
-            <div className="mt-10 grid gap-6 md:grid-cols-3">
-              {shopsWithStory.map((shop, i) => {
-                const story = shop.stories[0];
-                const displayTags = (shop.display_tags ?? []).slice(0, 2);
-                return (
-                  <ScrollFadeIn key={shop.id} delay={i * 150} direction="up">
-                    <Link href={`/shops/${shop.slug}`} className="group block">
-                      <Card className="h-full overflow-hidden border-border/30 transition-all duration-300 group-hover:-translate-y-1 group-hover:shadow-lg">
-                        {/* 画像 */}
-                        <div className="relative aspect-[4/3] overflow-hidden bg-muted">
-                          {shop.image_url ? (
-                            <img
-                              src={shop.image_url}
-                              alt={shop.name}
-                              className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
-                            />
-                          ) : (
-                            <div className="flex h-full items-center justify-center text-4xl">
-                              🍽️
-                            </div>
-                          )}
-                          {/* タグバッジ */}
-                          {displayTags.length > 0 && (
-                            <div className="absolute bottom-2 left-2 flex gap-1">
-                              {displayTags.map((tag, ti) => (
-                                <Badge
-                                  key={ti}
-                                  variant="secondary"
-                                  className="bg-white/90 text-xs backdrop-blur-sm"
-                                >
-                                  {tag.icon} {tag.label}
-                                </Badge>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                        <CardContent className="p-4">
-                          <p className="text-xs text-muted-foreground">
-                            {shop.area ?? "エリア未設定"}
-                          </p>
-                          <h3 className="mt-1 font-heading text-base font-bold">
-                            {shop.name}
-                          </h3>
-                          {story?.hook_sentence && (
-                            <p className="mt-2 text-sm italic leading-relaxed text-primary">
-                              &ldquo;{story.hook_sentence}&rdquo;
-                            </p>
-                          )}
-                          <p className="mt-3 flex items-center gap-1 text-xs font-medium text-primary group-hover:underline">
-                            ストーリーを読む
-                            <ArrowRight className="h-3 w-3" />
-                          </p>
-                        </CardContent>
-                      </Card>
-                    </Link>
-                  </ScrollFadeIn>
-                );
-              })}
+          <ScrollFadeIn delay={200}>
+            <div className="mt-8 rounded-2xl bg-warm p-6 text-center md:p-8">
+              <p className="text-base font-medium text-foreground md:text-lg">
+                続々とこだわりのお店が参加中。
+              </p>
+              <p className="mt-2 text-base text-muted-foreground">
+                店主の想いやこだわりが詰まったストーリーを読んで、
+                <br className="hidden sm:block" />
+                あなたの街の推し店を探してみましょう。
+              </p>
+              <Button className="mt-5" asChild>
+                <Link href="/home">
+                  お店を探す
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </Link>
+              </Button>
             </div>
-          ) : (
-            /* 店舗データがない場合のフォールバック */
-            <ScrollFadeIn delay={200}>
-              <div className="mt-10 rounded-2xl bg-warm p-8 text-center">
-                <p className="text-lg font-medium text-foreground">
-                  続々とこだわりのお店が参加中。
-                </p>
-                <p className="mt-2 text-sm text-muted-foreground">
-                  あなたの街の推し店を探してみましょう。
-                </p>
-                <Button className="mt-6" asChild>
-                  <Link href="/home">
-                    お店を探す
-                    <ArrowRight className="ml-2 h-4 w-4" />
-                  </Link>
-                </Button>
-              </div>
-            </ScrollFadeIn>
-          )}
-        </div>
-      </section>
-
-      {/* ──────────────────────────────────────
-          S5. UGC風 — 「推し声」セクション
-      ────────────────────────────────────── */}
-      <section className="bg-warm px-4 py-16 md:py-20">
-        <div className="mx-auto max-w-5xl">
-          <ScrollFadeIn>
-            <h2 className="text-balance text-center font-heading text-2xl font-bold md:text-3xl">
-              みんなの&ldquo;推し声&rdquo;
-            </h2>
           </ScrollFadeIn>
-
-          <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {OSHI_VOICES.map((voice, i) => (
-              <ScrollFadeIn key={i} delay={i * 100} direction="up">
-                <Card className="h-full border-none bg-white shadow-sm">
-                  <CardContent className="p-5">
-                    <Quote className="h-5 w-5 text-primary/40" />
-                    <p className="mt-2 text-sm leading-relaxed text-foreground">
-                      {voice.comment}
-                    </p>
-                    <div className="mt-4 flex items-center gap-3">
-                      <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-sm font-bold text-primary">
-                        {voice.name[0]}
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium">{voice.name}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {voice.shop}
-                        </p>
-                      </div>
-                      <Badge
-                        variant="outline"
-                        className="ml-auto shrink-0 text-xs"
-                      >
-                        🏅 推し歴{voice.months}ヶ月
-                      </Badge>
-                    </div>
-                  </CardContent>
-                </Card>
-              </ScrollFadeIn>
-            ))}
-          </div>
         </div>
       </section>
 
       {/* ──────────────────────────────────────
-          S6. 使い方 — シンプル3ステップ
+          S5. 使い方 — シンプル3ステップ（コンパクト版）
       ────────────────────────────────────── */}
-      <section className="px-4 py-16 md:py-20">
+      <section className="bg-warm px-4 py-12 md:py-16">
         <div className="mx-auto max-w-4xl">
           <ScrollFadeIn>
             <h2 className="text-balance text-center font-heading text-2xl font-bold md:text-3xl">
@@ -405,13 +233,13 @@ export default async function ConsumerLpPage() {
             </h2>
           </ScrollFadeIn>
 
-          <div className="mt-10 grid gap-8 md:grid-cols-3">
+          <div className="mt-8 grid gap-6 md:grid-cols-3">
             {[
               {
                 step: "01",
                 icon: Search,
                 title: "気分で探す",
-                desc: "今の気分やシーンからお店を見つける",
+                desc: "今の気分や食べたいメニューからお店を見つける",
               },
               {
                 step: "02",
@@ -428,17 +256,16 @@ export default async function ConsumerLpPage() {
             ].map((item, i) => (
               <ScrollFadeIn key={i} delay={i * 150} direction="up">
                 <div className="relative flex flex-col items-center text-center">
-                  {/* ステップ番号 */}
-                  <span className="absolute -top-2 right-4 font-heading text-6xl font-bold text-primary/10 md:right-0">
+                  <span className="absolute -top-1 right-4 font-heading text-5xl font-bold text-primary/10 md:right-0 md:text-6xl">
                     {item.step}
                   </span>
-                  <div className="relative z-10 flex h-20 w-20 items-center justify-center rounded-full bg-primary/10">
-                    <item.icon className="h-10 w-10 text-primary" />
+                  <div className="relative z-10 flex h-14 w-14 items-center justify-center rounded-full bg-primary/10 md:h-16 md:w-16">
+                    <item.icon className="h-7 w-7 text-primary md:h-8 md:w-8" />
                   </div>
-                  <h3 className="mt-4 font-heading text-lg font-bold">
+                  <h3 className="mt-3 font-heading text-base font-bold md:text-lg">
                     {item.title}
                   </h3>
-                  <p className="mt-2 text-sm text-muted-foreground">
+                  <p className="mt-1 text-base text-muted-foreground">
                     {item.desc}
                   </p>
                 </div>
@@ -449,9 +276,9 @@ export default async function ConsumerLpPage() {
       </section>
 
       {/* ──────────────────────────────────────
-          S7. Before/After — 生活変化の訴求
+          S6. Before/After — 生活変化の訴求（コンパクト版）
       ────────────────────────────────────── */}
-      <section className="bg-warm px-4 py-16 md:py-20">
+      <section className="px-4 py-12 md:py-16">
         <div className="mx-auto max-w-4xl">
           <ScrollFadeIn>
             <h2 className="text-balance text-center font-heading text-2xl font-bold md:text-3xl">
@@ -461,39 +288,31 @@ export default async function ConsumerLpPage() {
             </h2>
           </ScrollFadeIn>
 
-          <div className="mt-8 flex flex-col gap-3">
+          <div className="mt-6 flex flex-col gap-2">
             {BEFORE_AFTER.map((item, i) => (
               <ScrollFadeIn key={i} delay={i * 120} direction="left">
-                <div className="flex flex-col overflow-hidden rounded-xl border border-border/30 bg-white shadow-sm md:flex-row">
+                <div className="grid grid-cols-[1fr_24px_1fr] items-stretch overflow-hidden rounded-lg border border-border/30 bg-white shadow-sm">
                   {/* Before */}
-                  <div className="flex flex-1 items-center gap-2 bg-muted/30 px-4 py-3">
-                    <span className="shrink-0 text-lg text-muted-foreground/50">
-                      ▸
+                  <div className="bg-muted/30 px-3 py-2.5">
+                    <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                      Before
                     </span>
-                    <div>
-                      <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-                        Before
-                      </span>
-                      <p className="text-sm leading-snug text-muted-foreground">
-                        {item.before}
-                      </p>
-                    </div>
+                    <p className="text-sm leading-snug text-muted-foreground">
+                      {item.before}
+                    </p>
                   </div>
                   {/* 矢印 */}
-                  <div className="flex items-center justify-center bg-white px-3 py-1 md:py-0">
-                    <ArrowRight className="h-4 w-4 rotate-90 text-primary md:rotate-0" />
+                  <div className="flex items-center justify-center">
+                    <ArrowRight className="h-3.5 w-3.5 text-primary" />
                   </div>
                   {/* After */}
-                  <div className="flex flex-1 items-center gap-2 px-4 py-3">
-                    <span className="shrink-0 text-lg text-primary">★</span>
-                    <div>
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-primary">
-                        After
-                      </span>
-                      <p className="text-sm font-medium leading-snug text-foreground">
-                        {item.after}
-                      </p>
-                    </div>
+                  <div className="px-3 py-2.5">
+                    <span className="text-xs font-bold uppercase tracking-wider text-primary">
+                      After
+                    </span>
+                    <p className="text-sm font-medium leading-snug text-foreground">
+                      {item.after}
+                    </p>
                   </div>
                 </div>
               </ScrollFadeIn>
@@ -503,7 +322,7 @@ export default async function ConsumerLpPage() {
       </section>
 
       {/* ──────────────────────────────────────
-          S8. CTA — 最終アクション
+          S7. CTA — 最終アクション
       ────────────────────────────────────── */}
       <section className="relative overflow-hidden bg-gradient-to-br from-primary to-primary/80 px-4 py-16 text-primary-foreground md:py-24">
         {/* 装飾 */}
@@ -518,10 +337,13 @@ export default async function ConsumerLpPage() {
               <br />
               探しに行こう。
             </h2>
-            <p className="text-balance mx-auto mt-4 max-w-md text-sm leading-relaxed opacity-90 md:text-base">
-              登録は無料。こだわりのお店との
+            <p className="text-balance mx-auto mt-4 max-w-md text-base leading-relaxed opacity-90 md:text-lg">
+              登録・月額費用は完全無料。こだわりのお店との
               <br className="sm:hidden" />
               新しい出会いが、ここから始まります。
+            </p>
+            <p className="mx-auto mt-2 max-w-sm text-sm opacity-60">
+              ※ 各店のファンクラブ機能を利用する場合に、お店への会費支払いが生じる場合があります。
             </p>
             <Button
               size="lg"
@@ -534,7 +356,7 @@ export default async function ConsumerLpPage() {
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Link>
             </Button>
-            <p className="mt-4 text-xs opacity-70">
+            <p className="mt-4 text-sm opacity-70">
               <Link
                 href="/for-shops"
                 className="underline underline-offset-2 transition-opacity hover:opacity-100"
