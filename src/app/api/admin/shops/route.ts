@@ -1,7 +1,15 @@
 import { NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
 import { requireAdmin } from "@/lib/admin-auth";
-import { createServerSupabaseClient } from "@/lib/supabase/server";
 import type { Shop, Story } from "@/types/database";
+
+// 管理者用: RLSバイパスでサービスロールクライアント使用
+function createAdminClient() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  );
+}
 
 export async function GET() {
   try {
@@ -10,7 +18,7 @@ export async function GET() {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const supabase = await createServerSupabaseClient();
+    const supabase = createAdminClient();
 
     const { data: shops, error } = await supabase
       .from("shops")
@@ -65,7 +73,7 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: "id is required" }, { status: 400 });
     }
 
-    const supabase = await createServerSupabaseClient();
+    const supabase = createAdminClient();
     const { error } = await supabase
       .from("shops")
       .update(updates as never)

@@ -191,7 +191,7 @@ describe("API: /api/shop-application", () => {
 
   it("POST step=3: ドラフトをpendingに変更", async () => {
     mockSupabase.auth.getUser.mockResolvedValue({
-      data: { user: { id: "user-1" } },
+      data: { user: { id: "user-1", email: "test@example.com" } },
       error: null,
     });
 
@@ -204,13 +204,26 @@ describe("API: /api/shop-application", () => {
     mockSupabase.from.mockImplementation(() => {
       callCount++;
       if (callCount === 1) {
+        // ドラフト確認
         return {
           select: vi.fn().mockReturnThis(),
           eq: vi.fn().mockReturnThis(),
           maybeSingle: vi.fn().mockResolvedValue({ data: { id: "draft-1" }, error: null }),
         };
       }
-      return updateChain;
+      if (callCount === 2) {
+        // ステータス更新
+        return updateChain;
+      }
+      // 送信後のドラフト全データ取得（メール通知用）
+      return {
+        select: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockReturnThis(),
+        single: vi.fn().mockResolvedValue({
+          data: { id: "draft-1", shop_name: "テスト店", applicant_name: "テスト太郎" },
+          error: null,
+        }),
+      };
     });
 
     const req = new Request("http://localhost/api/shop-application", {

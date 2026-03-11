@@ -104,7 +104,7 @@ export async function POST(request: Request) {
 
         await resend.emails.send({
           from: "オシドリ <noreply@oshidori.vercel.app>",
-          to: "genta.sasaki.tyd@gmail.com",
+          to: "oshidori.service@gmail.com",
           subject: `【オシドリ】お問い合わせ: ${inquiry_type === "shop" ? "店舗側" : inquiry_type === "bug" ? "不具合報告" : "一般"}`,
           text: [
             `お名前: ${name}`,

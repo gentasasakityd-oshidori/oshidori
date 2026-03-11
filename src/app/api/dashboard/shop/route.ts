@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { getMyShopId, verifyShopOwnership } from "@/lib/queries/my-shop";
 import { geocodeAddress } from "@/lib/geocode";
+import { notifyShopRegistered, notifyOwnerShopRegistered } from "@/lib/email";
 
 /** Service Role クライアント（RLSバイパス用） */
 function createServiceClient() {
@@ -320,6 +321,24 @@ export async function POST(request: NextRequest) {
         longitude: resolvedLng,
         walking_minutes: walking_minutes || null,
       } as never, { onConflict: "shop_id" });
+    }
+
+    // メール通知（非同期・エラー握りつぶし）
+    const shopRecord = data as { name?: string; owner_name?: string; category?: string; phone?: string };
+    notifyShopRegistered({
+      shopName: shopRecord.name || name?.trim() || "",
+      ownerName: shopRecord.owner_name || owner_name?.trim() || "",
+      category: category || "",
+      address: fullAddress,
+      phone: phoneResult.normalized || "",
+      ownerEmail: user.email,
+    }).catch((e) => console.error("店舗登録通知エラー:", e));
+
+    if (user.email) {
+      notifyOwnerShopRegistered(user.email, {
+        shopName: shopRecord.name || name?.trim() || "",
+        ownerName: shopRecord.owner_name || owner_name?.trim() || "",
+      }).catch((e) => console.error("オーナー通知エラー:", e));
     }
 
     return NextResponse.json({ shop: data }, { status: 201 });

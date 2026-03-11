@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { notifyShopApplicationReceived, notifyApplicantReceived } from "@/lib/email";
 
 /**
  * GET: 既存のドラフト or 審査中申請を確認
@@ -234,6 +235,30 @@ export async function POST(request: Request) {
       if (updateError) {
         return NextResponse.json({ error: "送信に失敗しました" }, { status: 500 });
       }
+
+      // ドラフトの全データを取得してメール通知
+      const { data: submittedApp } = await db
+        .from("shop_role_applications")
+        .select("*")
+        .eq("id", existing.id)
+        .single();
+
+      if (submittedApp && user.email) {
+        const sa = submittedApp as { shop_name: string; applicant_name: string; shop_genre?: string };
+        // 運営通知（非同期、失敗しても送信成功は返す）
+        notifyShopApplicationReceived({
+          shopName: sa.shop_name,
+          applicantName: sa.applicant_name,
+          applicantEmail: user.email,
+          category: sa.shop_genre || "未設定",
+        }).catch((e) => console.error("申請受付通知エラー:", e));
+        // 申請者確認メール
+        notifyApplicantReceived(user.email, {
+          shopName: sa.shop_name,
+          applicantName: sa.applicant_name,
+        }).catch((e) => console.error("申請者通知エラー:", e));
+      }
+
       return NextResponse.json({ success: true });
     }
 
@@ -306,6 +331,20 @@ export async function POST(request: Request) {
         { error: "申請の送信に失敗しました" },
         { status: 500 }
       );
+    }
+
+    // メール通知（非同期、失敗しても送信成功は返す）
+    if (user.email) {
+      notifyShopApplicationReceived({
+        shopName: shop_name,
+        applicantName: legacyName,
+        applicantEmail: user.email,
+        category: shop_genre || "未設定",
+      }).catch((e) => console.error("申請受付通知エラー:", e));
+      notifyApplicantReceived(user.email, {
+        shopName: shop_name,
+        applicantName: legacyName,
+      }).catch((e) => console.error("申請者通知エラー:", e));
     }
 
     return NextResponse.json({ success: true });

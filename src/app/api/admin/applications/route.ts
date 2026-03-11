@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { triggerPostApprovalPipeline } from "@/lib/onboarding-pipeline";
+import { notifyApplicationResult } from "@/lib/email";
 
 async function verifyAdmin(supabase: Awaited<ReturnType<typeof createServerSupabaseClient>>) {
   const {
@@ -185,6 +186,24 @@ export async function PATCH(request: Request) {
           console.error("[Pipeline] Background pipeline error:", err);
         });
       }
+    }
+
+    // 審査結果メール通知（承認・却下共通）
+    // 申請者のメールアドレスを取得
+    const { data: applicantUser } = await db
+      .from("users")
+      .select("email")
+      .eq("id", app.user_id)
+      .single();
+    const applicantEmail = (applicantUser as { email?: string } | null)?.email;
+
+    if (applicantEmail) {
+      notifyApplicationResult(applicantEmail, {
+        applicantName: app.applicant_name,
+        shopName: app.shop_name,
+        approved: action === "approved",
+        rejectReason: action === "rejected" ? (review_note || undefined) : undefined,
+      }).catch((e) => console.error("審査結果通知エラー:", e));
     }
 
     return NextResponse.json({ success: true });
