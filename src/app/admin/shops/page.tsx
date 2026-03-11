@@ -2,11 +2,11 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { Eye, EyeOff, Heart, BookOpen, Loader2, ExternalLink, Activity, RefreshCw, AlertTriangle, Play } from "lucide-react";
+import { Eye, EyeOff, Heart, BookOpen, Loader2, ExternalLink, Activity, RefreshCw, AlertTriangle, Play, ChevronRight, Clock, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { PHASE_METADATA, type OnboardingPhase } from "@/lib/onboarding";
+import { PHASE_METADATA, ONBOARDING_PHASES, OWNER_VISIBLE_STEPS, type OnboardingPhase } from "@/lib/onboarding";
 import type { Shop } from "@/types/database";
 
 type AdminShop = Shop & {
@@ -105,7 +105,45 @@ export default function AdminShopsPage() {
       shortLabel: phase,
       color: "bg-gray-100",
       textColor: "text-gray-700",
+      description: "",
+      actor: "system" as const,
+      needsAction: false,
     };
+  };
+
+  // フェーズ進捗率（0〜100）
+  const getPhaseProgress = (phase: string): number => {
+    if (phase === "pipeline_error") return 0;
+    const idx = ONBOARDING_PHASES.indexOf(phase as OnboardingPhase);
+    if (idx < 0) return 0;
+    return Math.round((idx / (ONBOARDING_PHASES.length - 1)) * 100);
+  };
+
+  // 現在のステップ番号
+  const getCurrentStep = (phase: string): { step: number; total: number; label: string } => {
+    const ownerStep = OWNER_VISIBLE_STEPS.find((s) =>
+      s.phases.includes(phase as OnboardingPhase)
+    );
+    return {
+      step: ownerStep?.step ?? 0,
+      total: OWNER_VISIBLE_STEPS.length,
+      label: ownerStep?.label ?? "不明",
+    };
+  };
+
+  // 次のアクション表示テキスト
+  const getNextAction = (phase: string): string | null => {
+    const info = getPhaseInfo(phase);
+    if (!info.needsAction) return null;
+    switch (phase) {
+      case "application_pending": return "承認が必要";
+      case "ready_for_interview": return "インタビュアー割当が必要";
+      case "interviewer_assigned": return "日程調整が必要";
+      case "story_review": return "ストーリー確認が必要";
+      case "photo_pending": return "写真アップロード待ち";
+      case "pipeline_error": return "再実行が必要";
+      default: return null;
+    }
   };
 
   // フィルタリング
@@ -178,103 +216,153 @@ export default function AdminShopsPage() {
             const phase = (shop as AdminShop & { onboarding_phase?: string }).onboarding_phase || "application_pending";
             const phaseInfo = getPhaseInfo(phase);
             const isError = phase === "pipeline_error";
+            const isPublished = phase === "published";
+            const progress = getPhaseProgress(phase);
+            const stepInfo = getCurrentStep(phase);
+            const nextAction = getNextAction(phase);
 
             return (
-              <Card key={shop.id} className={isError ? "border-red-300" : ""}>
-                <CardContent className="flex items-center gap-4 p-4">
-                  {/* 店舗情報 */}
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <Link
-                        href={`/admin/shops/${shop.id}`}
-                        className="font-semibold hover:text-primary hover:underline"
-                      >
-                        {shop.name}
-                      </Link>
-                      <Badge
-                        variant={shop.is_published ? "default" : "secondary"}
-                        className="text-xs"
-                      >
-                        {shop.is_published ? "公開中" : "非公開"}
-                      </Badge>
-                      {/* オンボーディングフェーズバッジ */}
-                      <Badge
-                        variant="outline"
-                        className={`text-xs border-0 ${phaseInfo.color} ${phaseInfo.textColor}`}
-                      >
-                        {phaseInfo.shortLabel}
-                      </Badge>
-                    </div>
-                    <p className="mt-0.5 text-sm text-muted-foreground">
-                      {shop.owner_name} / {shop.area} / {shop.category}
-                    </p>
-                    <div className="mt-2 flex items-center gap-4 text-xs text-muted-foreground">
-                      <span className="flex items-center gap-1">
-                        <BookOpen className="h-3 w-3" />
-                        ストーリー {shop.story_count}件
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <Heart className="h-3 w-3" />
-                        ファン {shop.oshi_count}
-                      </span>
-                      {(() => {
-                        const health = calcHealthScore(shop);
-                        return (
-                          <span className={`flex items-center gap-1 font-medium ${health.color}`}>
-                            <Activity className="h-3 w-3" />
-                            {health.label} {health.score}点
-                          </span>
-                        );
-                      })()}
-                    </div>
-                    {/* エラー表示 */}
-                    {isError && (
-                      <div className="mt-2 flex items-center gap-2 text-xs text-red-600">
-                        <AlertTriangle className="h-3 w-3" />
-                        パイプラインエラーが発生しています
+              <Card key={shop.id} className={isError ? "border-red-300 border-2" : nextAction && !isError ? "border-amber-200" : ""}>
+                <CardContent className="p-4">
+                  <div className="flex items-start gap-4">
+                    {/* 店舗情報 */}
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <Link
+                          href={`/admin/shops/${shop.id}`}
+                          className="font-semibold hover:text-primary hover:underline"
+                        >
+                          {shop.name}
+                        </Link>
+                        <ChevronRight className="h-3 w-3 text-muted-foreground" />
                       </div>
-                    )}
-                  </div>
+                      <p className="mt-0.5 text-sm text-muted-foreground">
+                        {shop.owner_name} / {shop.area} / {shop.category}
+                      </p>
 
-                  {/* アクション */}
-                  <div className="flex items-center gap-2 shrink-0">
-                    {isError && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="gap-1 text-red-600 border-red-300 hover:bg-red-50"
-                        onClick={() => retryPipeline(shop.id)}
-                        disabled={retryingId === shop.id}
-                      >
-                        {retryingId === shop.id ? (
-                          <Loader2 className="h-3 w-3 animate-spin" />
-                        ) : (
-                          <Play className="h-3 w-3" />
+                      {/* ステータスエリア */}
+                      <div className="mt-3 rounded-lg border bg-gray-50/80 p-3">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            {isPublished ? (
+                              <CheckCircle2 className="h-4 w-4 text-green-600" />
+                            ) : isError ? (
+                              <AlertTriangle className="h-4 w-4 text-red-600" />
+                            ) : (
+                              <Clock className="h-4 w-4 text-blue-600" />
+                            )}
+                            <span className="text-sm font-semibold">
+                              {phaseInfo.label}
+                            </span>
+                            <Badge
+                              variant="outline"
+                              className={`text-[10px] border-0 ${phaseInfo.color} ${phaseInfo.textColor}`}
+                            >
+                              STEP {stepInfo.step}/{stepInfo.total}: {stepInfo.label}
+                            </Badge>
+                          </div>
+                          <span className="text-xs text-muted-foreground font-medium">
+                            {progress}%
+                          </span>
+                        </div>
+
+                        {/* プログレスバー */}
+                        {!isPublished && (
+                          <div className="mt-2 h-1.5 w-full rounded-full bg-gray-200 overflow-hidden">
+                            <div
+                              className={`h-full rounded-full transition-all ${
+                                isError ? "bg-red-400" : "bg-primary"
+                              }`}
+                              style={{ width: `${Math.max(progress, 5)}%` }}
+                            />
+                          </div>
                         )}
-                        再実行
-                      </Button>
-                    )}
-                    <Button variant="ghost" size="icon" asChild>
-                      <Link href={`/shops/${shop.slug}`} target="_blank">
-                        <ExternalLink className="h-4 w-4" />
-                      </Link>
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="gap-1"
-                      onClick={() => togglePublish(shop.id, shop.is_published)}
-                      disabled={togglingId === shop.id}
-                    >
-                      {togglingId === shop.id ? (
-                        <Loader2 className="h-3 w-3 animate-spin" />
-                      ) : shop.is_published ? (
-                        <EyeOff className="h-3 w-3" />
-                      ) : (
-                        <Eye className="h-3 w-3" />
+
+                        {/* 次のアクション */}
+                        {nextAction && (
+                          <div className={`mt-2 flex items-center gap-1.5 text-xs font-medium ${
+                            isError ? "text-red-600" : "text-amber-700"
+                          }`}>
+                            <span className={`inline-block h-1.5 w-1.5 rounded-full ${
+                              isError ? "bg-red-500 animate-pulse" : "bg-amber-500"
+                            }`} />
+                            {nextAction}
+                          </div>
+                        )}
+
+                        {/* AI処理中の表示 */}
+                        {(phase === "pre_research_running" || phase === "design_doc_generating" || phase === "story_generating") && (
+                          <div className="mt-2 flex items-center gap-1.5 text-xs text-blue-600">
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                            AI処理中...
+                          </div>
+                        )}
+                      </div>
+
+                      {/* 統計情報 */}
+                      <div className="mt-2 flex items-center gap-4 text-xs text-muted-foreground">
+                        <span className="flex items-center gap-1">
+                          <BookOpen className="h-3 w-3" />
+                          ストーリー {shop.story_count}件
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <Heart className="h-3 w-3" />
+                          ファン {shop.oshi_count}
+                        </span>
+                        {(() => {
+                          const health = calcHealthScore(shop);
+                          return (
+                            <span className={`flex items-center gap-1 font-medium ${health.color}`}>
+                              <Activity className="h-3 w-3" />
+                              {health.label} {health.score}点
+                            </span>
+                          );
+                        })()}
+                      </div>
+                    </div>
+
+                    {/* アクション */}
+                    <div className="flex flex-col items-end gap-2 shrink-0">
+                      {isError && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="gap-1 text-red-600 border-red-300 hover:bg-red-50"
+                          onClick={() => retryPipeline(shop.id)}
+                          disabled={retryingId === shop.id}
+                        >
+                          {retryingId === shop.id ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            <Play className="h-3 w-3" />
+                          )}
+                          再実行
+                        </Button>
                       )}
-                      {shop.is_published ? "非公開" : "公開"}
-                    </Button>
+                      <div className="flex items-center gap-1">
+                        <Button variant="ghost" size="icon" className="h-8 w-8" asChild>
+                          <Link href={`/shops/${shop.slug}`} target="_blank">
+                            <ExternalLink className="h-3.5 w-3.5" />
+                          </Link>
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="gap-1 text-xs"
+                          onClick={() => togglePublish(shop.id, shop.is_published)}
+                          disabled={togglingId === shop.id}
+                        >
+                          {togglingId === shop.id ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : shop.is_published ? (
+                            <EyeOff className="h-3 w-3" />
+                          ) : (
+                            <Eye className="h-3 w-3" />
+                          )}
+                          {shop.is_published ? "非公開" : "公開"}
+                        </Button>
+                      </div>
+                    </div>
                   </div>
                 </CardContent>
               </Card>

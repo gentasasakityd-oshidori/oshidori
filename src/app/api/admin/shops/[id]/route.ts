@@ -1,6 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/admin-auth";
-import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { createClient } from "@supabase/supabase-js";
+
+// 管理者用: RLSバイパスでサービスロールクライアント使用
+function createAdminClient() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  );
+}
 
 export async function GET(
   _request: NextRequest,
@@ -13,7 +21,7 @@ export async function GET(
     }
 
     const { id } = await params;
-    const supabase = await createServerSupabaseClient();
+    const supabase = createAdminClient();
 
     // 店舗基本情報
     const { data: shop, error: shopError } = await supabase
@@ -78,6 +86,15 @@ export async function GET(
       .select("id", { count: "exact", head: true })
       .eq("shop_id", id);
 
+    // 申請情報（shop_applicationsテーブル）
+    const { data: application } = await supabase
+      .from("shop_applications")
+      .select("*")
+      .eq("shop_id", id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
     return NextResponse.json({
       shop,
       stories: stories ?? [],
@@ -88,6 +105,7 @@ export async function GET(
       empathy_tag_distribution: empathyTagDistribution,
       interviews: interviews ?? [],
       message_count: messageCount ?? 0,
+      application: application ?? null,
     });
   } catch (error) {
     console.error("Admin shop detail error:", error);
