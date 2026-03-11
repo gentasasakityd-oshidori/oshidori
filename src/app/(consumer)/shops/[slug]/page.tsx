@@ -1029,11 +1029,15 @@ export default function ShopDetailPage() {
 
           {/* SNS・ウェブサイトリンク */}
           {(() => {
+            const ext = shop as Record<string, unknown>;
             const websiteUrl = shop.website_url;
-            const instagramUrl = typeof (shop as Record<string, unknown>).instagram_url === "string" ? (shop as Record<string, unknown>).instagram_url as string : null;
+            const instagramUrl = typeof ext.instagram_url === "string" ? ext.instagram_url as string : null;
+            const xUrl = typeof ext.x_url === "string" ? ext.x_url as string : null;
+            const facebookUrl = typeof ext.facebook_url === "string" ? ext.facebook_url as string : null;
+            const youtubeUrl = typeof ext.youtube_url === "string" ? ext.youtube_url as string : null;
             const tabelogUrl = shop.tabelog_url;
             const gmbUrl = shop.gmb_url;
-            if (!websiteUrl && !instagramUrl && !tabelogUrl && !gmbUrl) return null;
+            if (!websiteUrl && !instagramUrl && !xUrl && !facebookUrl && !youtubeUrl && !tabelogUrl && !gmbUrl) return null;
             return (
               <div className="mt-2 flex flex-wrap gap-2">
                 {websiteUrl ? (
@@ -1056,6 +1060,39 @@ export default function ShopDetailPage() {
                     className="inline-flex items-center gap-1 rounded-full border border-pink-200 bg-gradient-to-r from-pink-50 to-purple-50 px-3 py-1 text-xs text-pink-600 hover:from-pink-100 hover:to-purple-100 transition-colors"
                   >
                     📷 Instagram
+                    <ExternalLink className="h-2.5 w-2.5" />
+                  </a>
+                ) : null}
+                {xUrl ? (
+                  <a
+                    href={xUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 rounded-full border border-gray-300 bg-gray-50 px-3 py-1 text-xs text-gray-700 hover:bg-gray-100 transition-colors"
+                  >
+                    𝕏 X
+                    <ExternalLink className="h-2.5 w-2.5" />
+                  </a>
+                ) : null}
+                {facebookUrl ? (
+                  <a
+                    href={facebookUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 rounded-full border border-blue-300 bg-blue-50 px-3 py-1 text-xs text-blue-700 hover:bg-blue-100 transition-colors"
+                  >
+                    📘 Facebook
+                    <ExternalLink className="h-2.5 w-2.5" />
+                  </a>
+                ) : null}
+                {youtubeUrl ? (
+                  <a
+                    href={youtubeUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 rounded-full border border-red-200 bg-red-50 px-3 py-1 text-xs text-red-600 hover:bg-red-100 transition-colors"
+                  >
+                    ▶ YouTube
                     <ExternalLink className="h-2.5 w-2.5" />
                   </a>
                 ) : null}

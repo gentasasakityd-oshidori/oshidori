@@ -21,6 +21,8 @@ import {
   Mail,
   Instagram,
   MessageCircle,
+  Facebook,
+  Youtube,
   Wallet,
   Users,
   Car,
@@ -67,6 +69,8 @@ type ShopData = {
   website_url?: string | null;
   instagram_url?: string | null;
   x_url?: string | null;
+  facebook_url?: string | null;
+  youtube_url?: string | null;
   line_url?: string | null;
   // 詳細情報（オプション）
   budget_lunch?: string | null;
@@ -886,6 +890,8 @@ function useShopForm(initial: {
   homepageUrl: string;
   instagramUrl: string;
   xUrl: string;
+  facebookUrl: string;
+  youtubeUrl: string;
   lineUrl: string;
   // 詳細情報（オプション）
   budgetLunch: string;
@@ -919,6 +925,8 @@ function useShopForm(initial: {
   const [homepageUrl, setHomepageUrl] = useState(initial.homepageUrl);
   const [instagramUrl, setInstagramUrl] = useState(initial.instagramUrl);
   const [xUrl, setXUrl] = useState(initial.xUrl);
+  const [facebookUrl, setFacebookUrl] = useState(initial.facebookUrl);
+  const [youtubeUrl, setYoutubeUrl] = useState(initial.youtubeUrl);
   const [lineUrl, setLineUrl] = useState(initial.lineUrl);
   // 詳細情報（オプション）
   const [budgetLunch, setBudgetLunch] = useState(initial.budgetLunch);
@@ -1005,6 +1013,10 @@ function useShopForm(initial: {
     if (igErr) errors.instagramUrl = igErr;
     const xErr = validateUrl(xUrl);
     if (xErr) errors.xUrl = xErr;
+    const fbErr = validateUrl(facebookUrl);
+    if (fbErr) errors.facebookUrl = fbErr;
+    const ytErr = validateUrl(youtubeUrl);
+    if (ytErr) errors.youtubeUrl = ytErr;
     const lineErr = validateUrl(lineUrl);
     if (lineErr) errors.lineUrl = lineErr;
 
@@ -1043,6 +1055,8 @@ function useShopForm(initial: {
     homepageUrl, setHomepageUrl,
     instagramUrl, setInstagramUrl,
     xUrl, setXUrl,
+    facebookUrl, setFacebookUrl,
+    youtubeUrl, setYoutubeUrl,
     lineUrl, setLineUrl,
     budgetLunch, setBudgetLunch,
     budgetDinner, setBudgetDinner,
@@ -1090,6 +1104,8 @@ function buildSubmitData(
     homepage_url: form.homepageUrl.trim() || null,
     instagram_url: form.instagramUrl.trim() || null,
     x_url: form.xUrl.trim() || null,
+    facebook_url: form.facebookUrl.trim() || null,
+    youtube_url: form.youtubeUrl.trim() || null,
     line_url: form.lineUrl.trim() || null,
     nearest_station: form.selectedStations.join(",") || geoData?.station || form.area || null,
     latitude: geoData?.lat || null,
@@ -1406,6 +1422,36 @@ function ExternalLinksFields({
               {form.fieldErrors.xUrl && <p className="text-xs text-red-500">{form.fieldErrors.xUrl}</p>}
             </div>
 
+            {/* Facebook */}
+            <div className="space-y-1.5">
+              <Label className="flex items-center gap-1.5 text-sm">
+                <Facebook className="h-3.5 w-3.5" />
+                Facebook
+              </Label>
+              <Input
+                value={form.facebookUrl}
+                onChange={(e) => form.setFacebookUrl(e.target.value)}
+                placeholder="https://facebook.com/yourshop"
+                className={form.fieldErrors.facebookUrl ? "border-red-300" : ""}
+              />
+              {form.fieldErrors.facebookUrl && <p className="text-xs text-red-500">{form.fieldErrors.facebookUrl}</p>}
+            </div>
+
+            {/* YouTube */}
+            <div className="space-y-1.5">
+              <Label className="flex items-center gap-1.5 text-sm">
+                <Youtube className="h-3.5 w-3.5" />
+                YouTube
+              </Label>
+              <Input
+                value={form.youtubeUrl}
+                onChange={(e) => form.setYoutubeUrl(e.target.value)}
+                placeholder="https://youtube.com/@yourshop"
+                className={form.fieldErrors.youtubeUrl ? "border-red-300" : ""}
+              />
+              {form.fieldErrors.youtubeUrl && <p className="text-xs text-red-500">{form.fieldErrors.youtubeUrl}</p>}
+            </div>
+
             {/* LINE */}
             <div className="space-y-1.5">
               <Label className="flex items-center gap-1.5 text-sm">
@@ -1520,6 +1566,8 @@ function ConfirmationStep({
           <Row label="ホームページ" value={form.homepageUrl || undefined} />
           <Row label="Instagram" value={form.instagramUrl || undefined} />
           <Row label="X (Twitter)" value={form.xUrl || undefined} />
+          <Row label="Facebook" value={form.facebookUrl || undefined} />
+          <Row label="YouTube" value={form.youtubeUrl || undefined} />
           <Row label="LINE" value={form.lineUrl || undefined} />
         </CardContent>
       </Card>
@@ -1572,6 +1620,8 @@ function ShopRegistrationForm({
     homepageUrl: "",
     instagramUrl: "",
     xUrl: "",
+    facebookUrl: "",
+    youtubeUrl: "",
     lineUrl: "",
     budgetLunch: "",
     budgetDinner: "",
@@ -1869,6 +1919,8 @@ export default function ShopInfoPage() {
       homepageUrl: s.website_url ?? "",
       instagramUrl: s.instagram_url ?? "",
       xUrl: s.x_url ?? "",
+      facebookUrl: s.facebook_url ?? "",
+      youtubeUrl: s.youtube_url ?? "",
       lineUrl: s.line_url ?? "",
       // 詳細情報（オプション）
       budgetLunch: s.budget_lunch ?? "",

@@ -160,7 +160,7 @@ export async function POST(request: NextRequest) {
       tabelog_url, gmb_url, website_url, homepage_url,
       // homepage_url を website_url に統合
       // SNS URL
-      instagram_url, x_url, line_url,
+      instagram_url, x_url, facebook_url, youtube_url, line_url,
       // エリア（最寄り駅）
       area,
       // ジオコーディング結果（フロントから渡される）
@@ -212,6 +212,8 @@ export async function POST(request: NextRequest) {
     if (!validateUrl(resolvedWebsiteUrl)) errors.push("ホームページURLの形式が不正です");
     if (!validateUrl(instagram_url)) errors.push("Instagram URLの形式が不正です");
     if (!validateUrl(x_url)) errors.push("X(Twitter) URLの形式が不正です");
+    if (!validateUrl(facebook_url)) errors.push("Facebook URLの形式が不正です");
+    if (!validateUrl(youtube_url)) errors.push("YouTube URLの形式が不正です");
     if (!validateUrl(line_url)) errors.push("LINE URLの形式が不正です");
 
     if (errors.length > 0) {
@@ -261,6 +263,8 @@ export async function POST(request: NextRequest) {
         website_url: resolvedWebsiteUrl?.trim() || null,
         instagram_url: instagram_url?.trim() || null,
         x_url: x_url?.trim() || null,
+        facebook_url: facebook_url?.trim() || null,
+        youtube_url: youtube_url?.trim() || null,
         line_url: line_url?.trim() || null,
         // 詳細情報（オプション）
         budget_lunch: budget_lunch?.trim() || null,
@@ -407,6 +411,8 @@ export async function PATCH(request: NextRequest) {
     if ("website_url" in updates && !validateUrl(updates.website_url)) errors.push("ホームページURLの形式が不正です");
     if ("instagram_url" in updates && !validateUrl(updates.instagram_url)) errors.push("Instagram URLの形式が不正です");
     if ("x_url" in updates && !validateUrl(updates.x_url)) errors.push("X(Twitter) URLの形式が不正です");
+    if ("facebook_url" in updates && !validateUrl(updates.facebook_url)) errors.push("Facebook URLの形式が不正です");
+    if ("youtube_url" in updates && !validateUrl(updates.youtube_url)) errors.push("YouTube URLの形式が不正です");
     if ("line_url" in updates && !validateUrl(updates.line_url)) errors.push("LINE URLの形式が不正です");
 
     // payment_methods が渡された場合、JSON変換
