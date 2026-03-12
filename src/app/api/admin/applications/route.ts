@@ -92,6 +92,8 @@ export async function PATCH(request: Request) {
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const db = supabase as any;
+    // RLSバイパス用サービスロールクライアント（owner_idを申請者に正しく設定するため）
+    const adminDb = createAdminClient();
 
     // 申請を取得
     const { data: application } = await db
@@ -148,8 +150,8 @@ export async function PATCH(request: Request) {
     // 承認の場合: ユーザーのroleをshop_ownerに更新 + shopsテーブルに初期レコード
     let pipelineShopId: string | null = null;
     if (action === "approved") {
-      // ユーザーrole更新
-      await db
+      // ユーザーrole更新（サービスロールで確実に実行）
+      await adminDb
         .from("users")
         .update({ role: "shop_owner" })
         .eq("id", app.user_id);
@@ -170,7 +172,8 @@ export async function PATCH(request: Request) {
         .maybeSingle();
       const finalSlug = existingSlug ? `${slug}-${Date.now()}` : slug;
 
-      const { data: newShop, error: shopInsertError } = await db.from("shops").insert({
+      // サービスロールでINSERT（RLSバイパスでowner_idを申請者に正しく設定）
+      const { data: newShop, error: shopInsertError } = await adminDb.from("shops").insert({
         slug: finalSlug,
         name: app.shop_name,
         owner_name: app.applicant_name,
@@ -206,7 +209,7 @@ export async function PATCH(request: Request) {
       pipelineShopId = (newShop as { id: string }).id;
 
       // 申請レコードに作成された店舗IDを紐付け
-      await db
+      await adminDb
         .from("shop_role_applications")
         .update({ shop_id: pipelineShopId })
         .eq("id", application_id);
