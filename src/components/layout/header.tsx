@@ -3,7 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter, usePathname } from "next/navigation";
-import { Search, Heart, Menu, X, LogOut, User, Store } from "lucide-react";
+import { Search, Heart, Menu, X, LogOut, User, Store, Shield } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet";
 import {
@@ -32,6 +32,7 @@ export function Header({ initialUser = null, initialNickname = null }: HeaderPro
   );
   const [nickname, setNickname] = useState<string | null>(initialNickname);
   const [userRole, setUserRole] = useState<string | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   /** /home#forecast のような同一ページ内ハッシュリンクを処理 */
   const handleHashNavigation = useCallback(
@@ -58,13 +59,14 @@ export function Header({ initialUser = null, initialNickname = null }: HeaderPro
       if (user) {
         supabase
           .from("users")
-          .select("nickname, role")
+          .select("nickname, role, is_admin")
           .eq("id", user.id)
           .single()
           .then(({ data }) => {
-            const d = data as { nickname: string; role: string } | null;
+            const d = data as { nickname: string; role: string; is_admin?: boolean } | null;
             setNickname(d?.nickname ?? null);
             setUserRole(d?.role ?? null);
+            setIsAdmin(d?.role === "admin" || d?.is_admin === true);
           });
       }
     });
@@ -77,17 +79,19 @@ export function Header({ initialUser = null, initialNickname = null }: HeaderPro
       if (session?.user) {
         supabase
           .from("users")
-          .select("nickname, role")
+          .select("nickname, role, is_admin")
           .eq("id", session.user.id)
           .single()
           .then(({ data }) => {
-            const d = data as { nickname: string; role: string } | null;
+            const d = data as { nickname: string; role: string; is_admin?: boolean } | null;
             setNickname(d?.nickname ?? null);
             setUserRole(d?.role ?? null);
+            setIsAdmin(d?.role === "admin" || d?.is_admin === true);
           });
       } else {
         setNickname(null);
         setUserRole(null);
+        setIsAdmin(false);
       }
     });
 
@@ -100,6 +104,7 @@ export function Header({ initialUser = null, initialNickname = null }: HeaderPro
     setUser(null);
     setNickname(null);
     setUserRole(null);
+    setIsAdmin(false);
     router.push("/home");
     router.refresh();
   }
@@ -178,7 +183,15 @@ export function Header({ initialUser = null, initialNickname = null }: HeaderPro
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-48">
-                {userRole === "shop_owner" && (
+                {isAdmin && (
+                  <DropdownMenuItem asChild>
+                    <Link href="/admin" className="cursor-pointer">
+                      <Shield className="mr-2 h-4 w-4" />
+                      本部管理
+                    </Link>
+                  </DropdownMenuItem>
+                )}
+                {(userRole === "shop_owner" || isAdmin) && (
                   <DropdownMenuItem asChild>
                     <Link href="/dashboard" className="cursor-pointer">
                       <Store className="mr-2 h-4 w-4" />
@@ -264,7 +277,17 @@ export function Header({ initialUser = null, initialNickname = null }: HeaderPro
                     <p className="text-sm text-muted-foreground">
                       ログイン中: {nickname ?? "ユーザー"}
                     </p>
-                    {userRole === "shop_owner" && (
+                    {isAdmin && (
+                      <Link
+                        href="/admin"
+                        className="flex items-center gap-2 rounded-lg bg-red-50 px-3 py-2 text-sm font-medium text-red-700 transition-colors hover:bg-red-100"
+                        onClick={() => setIsOpen(false)}
+                      >
+                        <Shield className="h-4 w-4" />
+                        本部管理
+                      </Link>
+                    )}
+                    {(userRole === "shop_owner" || isAdmin) && (
                       <Link
                         href="/dashboard"
                         className="flex items-center gap-2 rounded-lg bg-primary/10 px-3 py-2 text-sm font-medium text-primary transition-colors hover:bg-primary/20"

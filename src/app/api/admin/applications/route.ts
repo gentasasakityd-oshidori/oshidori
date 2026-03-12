@@ -170,7 +170,7 @@ export async function PATCH(request: Request) {
         .maybeSingle();
       const finalSlug = existingSlug ? `${slug}-${Date.now()}` : slug;
 
-      const { data: newShop } = await db.from("shops").insert({
+      const { data: newShop, error: shopInsertError } = await db.from("shops").insert({
         slug: finalSlug,
         name: app.shop_name,
         owner_name: app.applicant_name,
@@ -183,16 +183,33 @@ export async function PATCH(request: Request) {
         address_building: app.address_building || null,
         phone: app.phone || null,
         website_url: app.website_url || null,
-        instagram_url: app.instagram_url || null,
         tabelog_url: app.tabelog_url || null,
         gmb_url: app.gmb_url || null,
+        instagram_url: app.instagram_url || null,
         is_published: false,
         onboarding_phase: "pre_research_running",
       }).select("id").single();
 
-      if (newShop) {
-        pipelineShopId = (newShop as { id: string }).id;
+      if (shopInsertError || !newShop) {
+        console.error("[Approval] Shop insert failed:", shopInsertError);
+        // 店舗作成失敗時: 申請ステータスをpendingに戻す
+        await db
+          .from("shop_role_applications")
+          .update({ status: "pending", review_note: `店舗作成失敗: ${shopInsertError?.message || "unknown"}` })
+          .eq("id", application_id);
+        return NextResponse.json(
+          { error: "店舗の作成に失敗しました。もう一度お試しください。" },
+          { status: 500 }
+        );
       }
+
+      pipelineShopId = (newShop as { id: string }).id;
+
+      // 申請レコードに作成された店舗IDを紐付け
+      await db
+        .from("shop_role_applications")
+        .update({ shop_id: pipelineShopId })
+        .eq("id", application_id);
     }
 
     // 承認後パイプラインを after() で実行（レスポンス送信後もサーバーレス関数を維持）
@@ -204,6 +221,20 @@ export async function PATCH(request: Request) {
           await triggerPostApprovalPipeline(adminDb, shopId);
         } catch (err) {
           console.error("[Pipeline] Background pipeline error:", err);
+          // after()内でのエラーもpipeline_errorとして記録
+          try {
+            const adminDb = createAdminClient();
+            const errorMsg = err instanceof Error ? err.message : String(err);
+            await adminDb
+              .from("shops")
+              .update({
+                onboarding_phase: "pipeline_error",
+                description: `[after() Error] ${errorMsg.slice(0, 200)}`,
+              })
+              .eq("id", shopId);
+          } catch {
+            console.error("[Pipeline] Failed to set error phase in after() fallback");
+          }
         }
       });
     }

@@ -33,10 +33,23 @@ function calcHealthScore(shop: AdminShop): { score: number; label: string; color
   return { score, label, color };
 }
 
-type FilterTab = "all" | "onboarding" | "published" | "error";
+type FilterTab = "all" | "pending" | "onboarding" | "published" | "error";
+
+type Application = {
+  id: string;
+  user_id: string;
+  shop_name: string;
+  shop_genre: string | null;
+  shop_area: string | null;
+  applicant_name: string;
+  status: string;
+  created_at: string;
+  users?: { nickname?: string; avatar_url?: string } | null;
+};
 
 export default function AdminShopsPage() {
   const [shops, setShops] = useState<AdminShop[]>([]);
+  const [pendingApplications, setPendingApplications] = useState<Application[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
@@ -45,6 +58,7 @@ export default function AdminShopsPage() {
 
   useEffect(() => {
     loadShops();
+    loadPendingApplications();
   }, []);
 
   async function loadShops() {
@@ -59,6 +73,60 @@ export default function AdminShopsPage() {
       // Ignore
     }
     setIsLoading(false);
+  }
+
+  async function loadPendingApplications() {
+    try {
+      const res = await fetch("/api/admin/applications?status=pending");
+      if (res.ok) {
+        const data = await res.json();
+        setPendingApplications(data.applications || []);
+      }
+    } catch {
+      // Ignore
+    }
+  }
+
+  async function handleApproveApplication(applicationId: string) {
+    setActionLoadingId(applicationId);
+    try {
+      const res = await fetch("/api/admin/applications", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ application_id: applicationId, action: "approved" }),
+      });
+      if (res.ok) {
+        // 承認成功: 申請一覧を再読み込み、店舗一覧も再読み込み
+        await Promise.all([loadPendingApplications(), loadShops()]);
+        setActionMessage({ shopId: applicationId, text: "承認しました。パイプライン実行中...", type: "success" });
+      } else {
+        const data = await res.json();
+        setActionMessage({ shopId: applicationId, text: data.error || "エラー", type: "error" });
+      }
+    } catch {
+      setActionMessage({ shopId: applicationId, text: "通信エラー", type: "error" });
+    }
+    setActionLoadingId(null);
+    setTimeout(() => setActionMessage((prev) => prev?.shopId === applicationId ? null : prev), 5000);
+  }
+
+  async function handleRejectApplication(applicationId: string) {
+    const reason = prompt("却下理由（任意）:");
+    setActionLoadingId(applicationId);
+    try {
+      const res = await fetch("/api/admin/applications", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ application_id: applicationId, action: "rejected", review_note: reason || "" }),
+      });
+      if (res.ok) {
+        await loadPendingApplications();
+        setActionMessage({ shopId: applicationId, text: "却下しました", type: "success" });
+      }
+    } catch {
+      setActionMessage({ shopId: applicationId, text: "通信エラー", type: "error" });
+    }
+    setActionLoadingId(null);
   }
 
   async function togglePublish(shopId: string, currentState: boolean) {
@@ -206,8 +274,9 @@ export default function AdminShopsPage() {
     }
   };
 
-  // フィルタリング
+  // フィルタリング（pendingタブは別処理なので除外）
   const filteredShops = shops.filter((shop) => {
+    if (filter === "pending") return false;
     const phase = (shop as AdminShop & { onboarding_phase?: string }).onboarding_phase;
     if (filter === "all") return true;
     if (filter === "published") return shop.is_published;
@@ -216,6 +285,7 @@ export default function AdminShopsPage() {
     return true;
   });
 
+  const pendingCount = pendingApplications.length;
   const errorCount = shops.filter((s) => (s as AdminShop & { onboarding_phase?: string }).onboarding_phase === "pipeline_error").length;
   const onboardingCount = shops.filter((s) => !(s as AdminShop & { onboarding_phase?: string }).is_published && (s as AdminShop & { onboarding_phase?: string }).onboarding_phase !== "pipeline_error").length;
   const publishedCount = shops.filter((s) => s.is_published).length;
@@ -245,6 +315,7 @@ export default function AdminShopsPage() {
         <div className="flex gap-1 border-b px-1 min-w-max">
           {([
             { key: "all" as FilterTab, label: "全件", count: shops.length },
+            { key: "pending" as FilterTab, label: "申請待ち", count: pendingCount },
             { key: "onboarding" as FilterTab, label: "進行中", count: onboardingCount },
             { key: "published" as FilterTab, label: "公開", count: publishedCount },
             { key: "error" as FilterTab, label: "エラー", count: errorCount },
@@ -272,6 +343,65 @@ export default function AdminShopsPage() {
       {isLoading ? (
         <div className="mt-8 flex justify-center">
           <Loader2 className="h-6 w-6 animate-spin text-primary" />
+        </div>
+      ) : filter === "pending" ? (
+        /* 申請待ち一覧 */
+        <div className="mt-3 space-y-2">
+          {pendingApplications.length === 0 ? (
+            <p className="py-8 text-center text-muted-foreground text-sm">
+              承認待ちの申請はありません
+            </p>
+          ) : (
+            pendingApplications.map((app) => (
+              <Card key={app.id} className="border-amber-200">
+                <CardContent className="p-3 sm:p-4">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <p className="font-semibold text-sm sm:text-base">{app.shop_name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {app.applicant_name} / {app.shop_area || "エリア未設定"} / {app.shop_genre || "ジャンル未設定"}
+                      </p>
+                      <p className="text-[10px] text-muted-foreground mt-1">
+                        申請日: {new Date(app.created_at).toLocaleDateString("ja-JP")}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <Button
+                        variant="default"
+                        size="sm"
+                        className="gap-1 text-[11px] h-7 px-2 bg-green-600 hover:bg-green-700"
+                        onClick={() => handleApproveApplication(app.id)}
+                        disabled={actionLoadingId === app.id}
+                      >
+                        {actionLoadingId === app.id ? (
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                        ) : (
+                          <ThumbsUp className="h-3 w-3" />
+                        )}
+                        承認
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="gap-1 text-[11px] h-7 px-2 text-red-600 border-red-300 hover:bg-red-50"
+                        onClick={() => handleRejectApplication(app.id)}
+                        disabled={actionLoadingId === app.id}
+                      >
+                        却下
+                      </Button>
+                    </div>
+                  </div>
+                  {actionMessage?.shopId === app.id && (
+                    <span className={`text-[10px] font-medium mt-1 block ${
+                      actionMessage.type === "success" ? "text-green-600" : "text-red-600"
+                    }`}>
+                      {actionMessage.text}
+                    </span>
+                  )}
+                </CardContent>
+              </Card>
+            ))
+          )}
         </div>
       ) : (
         <div className="mt-3 space-y-2">
@@ -414,17 +544,20 @@ export default function AdminShopsPage() {
                         </div>
                       )}
 
-                      {/* パイプラインエラー詳細 */}
+                      {/* パイプラインエラー詳細（descriptionカラムから取得） */}
                       {isError && (() => {
-                        const meta = (shop as AdminShop & { metadata?: { pipeline_error?: { message?: string; occurred_at?: string } } }).metadata;
-                        const errInfo = meta?.pipeline_error;
-                        if (!errInfo?.message) return null;
+                        const desc = (shop as AdminShop & { description?: string }).description;
+                        if (!desc || !desc.startsWith("[Pipeline Error")) return null;
+                        // フォーマット: [Pipeline Error ISO日時] エラーメッセージ
+                        const match = desc.match(/^\[Pipeline Error (.+?)\] (.+)$/);
+                        const occurredAt = match?.[1];
+                        const message = match?.[2] || desc;
                         return (
                           <div className="mt-1.5 rounded bg-red-50 px-2 py-1 text-[10px] text-red-700">
                             <p className="font-medium">エラー:</p>
-                            <p className="mt-0.5 break-all line-clamp-2">{errInfo.message}</p>
-                            {errInfo.occurred_at && (
-                              <p className="mt-0.5 text-red-400">{new Date(errInfo.occurred_at).toLocaleString("ja-JP")}</p>
+                            <p className="mt-0.5 break-all line-clamp-2">{message}</p>
+                            {occurredAt && (
+                              <p className="mt-0.5 text-red-400">{new Date(occurredAt).toLocaleString("ja-JP")}</p>
                             )}
                           </div>
                         );

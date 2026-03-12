@@ -14,7 +14,7 @@ type Message = {
 type GeneratedContent = {
   update?: { content: string; should_post: boolean };
   supply_flash?: { item_name: string; description: string; supply_type: string; should_post: boolean };
-  sns?: { instagram: string; x: string };
+  sns?: { instagram: string; x: string; facebook?: string };
 };
 
 type CompletionResults = {
@@ -24,6 +24,7 @@ type CompletionResults = {
   flash_item: string | null;
   sns_instagram: string | null;
   sns_x: string | null;
+  sns_facebook: string | null;
 };
 
 export default function DailyReportPage() {
@@ -226,6 +227,25 @@ export default function DailyReportPage() {
                   </div>
                   <p className="text-sm bg-muted/50 rounded-lg p-3 whitespace-pre-line">
                     {generated.sns.x}
+                  </p>
+                </div>
+              )}
+              {generated.sns?.facebook && (
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs font-medium text-muted-foreground">Facebook</span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 gap-1 text-xs"
+                      onClick={() => copyToClipboard(generated.sns!.facebook!, "facebook")}
+                    >
+                      {copiedField === "facebook" ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                      {copiedField === "facebook" ? "コピー済" : "コピー"}
+                    </Button>
+                  </div>
+                  <p className="text-sm bg-muted/50 rounded-lg p-3 whitespace-pre-line">
+                    {generated.sns.facebook}
                   </p>
                 </div>
               )}

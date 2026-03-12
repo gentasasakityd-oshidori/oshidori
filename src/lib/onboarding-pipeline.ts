@@ -22,8 +22,11 @@ export async function triggerPostApprovalPipeline(
   shopId: string
 ): Promise<void> {
   try {
-    // Phase: pre_research_running
-    await updatePhase(supabase, shopId, "pre_research_running");
+    // Phase: pre_research_running（前回エラー情報をクリア）
+    await supabase
+      .from("shops")
+      .update({ onboarding_phase: "pre_research_running", description: null })
+      .eq("id", shopId);
 
     // 事前調査を実行
     console.log(`[Pipeline] Shop ${shopId}: Starting pre-research...`);
@@ -64,30 +67,22 @@ export async function triggerPostApprovalPipeline(
     console.error(`[Pipeline] Shop ${shopId}: Pipeline error:`, error);
 
     // エラー時は pipeline_error フェーズに設定し、管理画面から再実行可能にする
+    const errorMessage = error instanceof Error ? error.message : String(error);
     try {
-      await updatePhase(supabase, shopId, "pipeline_error");
-      // エラー情報をメタデータに保存（既存metadataとマージ）
-      const { data: currentShop } = await supabase
-        .from("shops")
-        .select("metadata")
-        .eq("id", shopId)
-        .single();
-      const existingMeta = (currentShop as { metadata?: Record<string, unknown> } | null)?.metadata ?? {};
+      const errorSummary = `[Pipeline Error ${new Date().toISOString()}] ${errorMessage.slice(0, 200)}`;
       await supabase
         .from("shops")
         .update({
-          metadata: {
-            ...existingMeta,
-            pipeline_error: {
-              message: error instanceof Error ? error.message : String(error),
-              stack: error instanceof Error ? error.stack?.slice(0, 500) : undefined,
-              occurred_at: new Date().toISOString(),
-            },
-          },
+          onboarding_phase: "pipeline_error",
+          description: errorSummary,
         })
         .eq("id", shopId);
     } catch (updateErr) {
       console.error(`[Pipeline] Shop ${shopId}: Failed to set error phase:`, updateErr);
+      // フォールバック: フェーズだけでも更新
+      try {
+        await updatePhase(supabase, shopId, "pipeline_error");
+      } catch { /* 最終手段 — ログのみ */ }
     }
   }
 }

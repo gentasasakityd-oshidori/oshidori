@@ -11,6 +11,9 @@ import {
   Zap,
   Mail,
   ExternalLink,
+  Eye,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -192,6 +195,80 @@ function ShareMenu({
   );
 }
 
+// ── SNSプレビューカード ──
+
+function SNSPreviewCard({ item, platform }: { item: ContentItem; platform: "instagram" | "x" | "facebook" }) {
+  const text = generateShareText(item);
+  const date = new Date(item.created_at).toLocaleDateString("ja-JP", { month: "short", day: "numeric" });
+
+  if (platform === "instagram") {
+    return (
+      <div className="rounded-lg border bg-white overflow-hidden">
+        <div className="flex items-center gap-2 px-3 py-2 border-b">
+          <div className="h-7 w-7 rounded-full bg-gradient-to-br from-purple-500 via-pink-500 to-orange-400 flex items-center justify-center">
+            <span className="text-[10px] font-bold text-white">{item.shop_name[0]}</span>
+          </div>
+          <span className="text-xs font-semibold">{item.shop_name}</span>
+        </div>
+        <div className="h-20 bg-gradient-to-br from-warm to-primary/10 flex items-center justify-center">
+          <span className="text-2xl">📸</span>
+        </div>
+        <div className="px-3 py-2">
+          <p className="text-[11px] leading-relaxed line-clamp-3">{text}</p>
+          <p className="mt-1 text-[10px] text-muted-foreground">{date}</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (platform === "x") {
+    return (
+      <div className="rounded-lg border bg-white p-3">
+        <div className="flex items-start gap-2">
+          <div className="h-8 w-8 rounded-full bg-gray-200 flex items-center justify-center shrink-0">
+            <span className="text-xs font-bold">{item.shop_name[0]}</span>
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-1">
+              <span className="text-xs font-bold truncate">{item.shop_name}</span>
+              <span className="text-[10px] text-muted-foreground">· {date}</span>
+            </div>
+            <p className="mt-0.5 text-[11px] leading-relaxed line-clamp-3">{text.slice(0, 140)}</p>
+            {item.url && (
+              <div className="mt-1.5 rounded border bg-gray-50 p-1.5">
+                <p className="text-[10px] text-muted-foreground truncate">{item.url}</p>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Facebook
+  return (
+    <div className="rounded-lg border bg-white overflow-hidden">
+      <div className="flex items-center gap-2 px-3 py-2">
+        <div className="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center">
+          <span className="text-xs font-bold text-blue-700">{item.shop_name[0]}</span>
+        </div>
+        <div>
+          <span className="text-xs font-semibold">{item.shop_name}</span>
+          <p className="text-[10px] text-muted-foreground">{date} · 🌐</p>
+        </div>
+      </div>
+      <div className="px-3 pb-2">
+        <p className="text-[11px] leading-relaxed line-clamp-4">{text}</p>
+      </div>
+      <div className="border-t px-3 py-1.5 flex gap-4">
+        <span className="text-[10px] text-muted-foreground">👍 いいね</span>
+        <span className="text-[10px] text-muted-foreground">💬 コメント</span>
+        <span className="text-[10px] text-muted-foreground">↗ シェア</span>
+      </div>
+    </div>
+  );
+}
+
 // ── メインページ ──
 
 type FilterTab = "all" | "story" | "update" | "flash";
@@ -201,6 +278,7 @@ export default function SNSHubPage() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<FilterTab>("all");
   const [openShareId, setOpenShareId] = useState<string | null>(null);
+  const [previewId, setPreviewId] = useState<string | null>(null);
 
   useEffect(() => {
     async function fetchContents() {
@@ -392,6 +470,7 @@ export default function SNSHubPage() {
           {filteredContents.map((item) => {
             const config = TYPE_CONFIG[item.type];
             const Icon = config.icon;
+            const isPreviewOpen = previewId === item.id;
 
             return (
               <Card key={item.id}>
@@ -416,8 +495,17 @@ export default function SNSHubPage() {
                       </p>
                     </div>
 
-                    {/* 共有ボタン */}
-                    <div className="shrink-0">
+                    {/* アクションボタン */}
+                    <div className="flex shrink-0 gap-1.5">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="gap-1 text-xs"
+                        onClick={() => setPreviewId(isPreviewOpen ? null : item.id)}
+                      >
+                        <Eye className="h-3.5 w-3.5" />
+                        {isPreviewOpen ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                      </Button>
                       <ShareMenu
                         item={item}
                         isOpen={openShareId === item.id}
@@ -427,6 +515,27 @@ export default function SNSHubPage() {
                       />
                     </div>
                   </div>
+
+                  {/* SNSプレビュー展開エリア */}
+                  {isPreviewOpen && (
+                    <div className="mt-4 border-t pt-4">
+                      <p className="mb-3 text-xs font-medium text-muted-foreground">SNSプレビュー</p>
+                      <div className="grid gap-3 sm:grid-cols-3">
+                        <div>
+                          <p className="mb-1.5 text-[10px] font-medium text-center text-muted-foreground">Instagram</p>
+                          <SNSPreviewCard item={item} platform="instagram" />
+                        </div>
+                        <div>
+                          <p className="mb-1.5 text-[10px] font-medium text-center text-muted-foreground">X (Twitter)</p>
+                          <SNSPreviewCard item={item} platform="x" />
+                        </div>
+                        <div>
+                          <p className="mb-1.5 text-[10px] font-medium text-center text-muted-foreground">Facebook</p>
+                          <SNSPreviewCard item={item} platform="facebook" />
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             );

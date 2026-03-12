@@ -151,15 +151,20 @@ export default function AdminLayout({
             );
           })}
         </nav>
-        <div className="absolute bottom-0 left-0 right-0 border-t p-2">
-          <div className="mb-2 px-3">
-            <Link
-              href="/home"
-              className="text-xs text-muted-foreground hover:text-primary"
-            >
-              ← 消費者サイトへ
-            </Link>
-          </div>
+        <div className="absolute bottom-0 left-0 right-0 border-t p-2 space-y-1">
+          <Link
+            href="/dashboard"
+            className="flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs text-muted-foreground hover:bg-primary/5 hover:text-primary transition-colors"
+          >
+            <Store className="h-3.5 w-3.5" />
+            店舗管理ページへ
+          </Link>
+          <Link
+            href="/home"
+            className="flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs text-muted-foreground hover:bg-gray-100 transition-colors"
+          >
+            ← 消費者サイトへ
+          </Link>
           <Button
             variant="ghost"
             size="sm"

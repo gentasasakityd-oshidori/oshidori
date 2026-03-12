@@ -262,11 +262,9 @@ export async function POST(request: NextRequest) {
         tabelog_url: tabelog_url?.trim() || null,
         gmb_url: gmb_url?.trim() || null,
         website_url: resolvedWebsiteUrl?.trim() || null,
-        instagram_url: instagram_url?.trim() || null,
-        x_url: x_url?.trim() || null,
+        // instagram_url, x_url, line_url はshopsテーブルに未追加のため除外
         facebook_url: facebook_url?.trim() || null,
         youtube_url: youtube_url?.trim() || null,
-        line_url: line_url?.trim() || null,
         // 詳細情報（オプション）
         budget_lunch: budget_lunch?.trim() || null,
         budget_dinner: budget_dinner?.trim() || null,
@@ -463,6 +461,12 @@ export async function PATCH(request: NextRequest) {
     // 最寄り駅をareaにも反映
     if (nearest_station) {
       updates.area = nearest_station;
+    }
+
+    // shopsテーブルに存在しないカラムを除外
+    const nonExistentColumns = ["instagram_url", "x_url", "line_url", "owner_real_name_sei", "owner_real_name_mei", "homepage_url", "nearest_station"];
+    for (const col of nonExistentColumns) {
+      delete updates[col];
     }
 
     const { data, error } = await supabase

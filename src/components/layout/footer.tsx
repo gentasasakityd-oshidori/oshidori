@@ -44,7 +44,7 @@ export function Footer() {
                 </Link>
               </li>
               <li>
-                <Link href="/apply-shop-owner" className="hover:text-foreground">
+                <Link href="/recommend-shop" className="hover:text-foreground">
                   お店の掲載リクエスト
                 </Link>
               </li>

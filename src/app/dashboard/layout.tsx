@@ -20,6 +20,7 @@ import {
   FileEdit,
   ClipboardEdit,
   Share2,
+  Shield,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet";
@@ -99,6 +100,7 @@ function SidebarContent({
   userNickname,
   userEmail,
   loginProvider,
+  isAdmin,
   onLogout,
 }: {
   pathname: string;
@@ -106,6 +108,7 @@ function SidebarContent({
   userNickname: string | null;
   userEmail: string | null;
   loginProvider: string | null;
+  isAdmin: boolean;
   onLogout: () => void;
 }) {
   return (
@@ -199,6 +202,16 @@ function SidebarContent({
             </div>
           </div>
         )}
+        {isAdmin && (
+          <Link
+            href="/admin"
+            className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 transition-colors hover:bg-red-100"
+            onClick={onNavigate}
+          >
+            <Shield className="h-4 w-4" />
+            本部管理へ
+          </Link>
+        )}
         <Link
           href="/home"
           className="flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
@@ -223,6 +236,7 @@ export default function DashboardLayout({
   const [userNickname, setUserNickname] = useState<string | null>(null);
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [loginProvider, setLoginProvider] = useState<string | null>(null);
+  const [isAdminUser, setIsAdminUser] = useState(false);
 
   useEffect(() => {
     const fetchUser = async () => {
@@ -233,10 +247,12 @@ export default function DashboardLayout({
       if (user) {
         const { data } = await supabase
           .from("users")
-          .select("nickname")
+          .select("nickname, role, is_admin")
           .eq("id", user.id)
           .single();
-        const nickname = (data as { nickname: string | null } | null)?.nickname;
+        const d = data as { nickname: string | null; role?: string; is_admin?: boolean } | null;
+        const nickname = d?.nickname;
+        setIsAdminUser(d?.role === "admin" || d?.is_admin === true);
         setUserNickname(nickname || user.email || null);
         setUserEmail(user.email || null);
         const provider = user.app_metadata?.provider;
@@ -264,6 +280,7 @@ export default function DashboardLayout({
             userNickname={userNickname}
             userEmail={userEmail}
             loginProvider={loginProvider}
+            isAdmin={isAdminUser}
             onLogout={handleLogout}
           />
         </div>
@@ -291,6 +308,7 @@ export default function DashboardLayout({
                 userNickname={userNickname}
                 userEmail={userEmail}
                 loginProvider={loginProvider}
+                isAdmin={isAdminUser}
                 onLogout={handleLogout}
               />
             </SheetContent>

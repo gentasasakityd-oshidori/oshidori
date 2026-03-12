@@ -91,18 +91,27 @@ export async function generateInterviewDesign(
     similarSuccessfulInterviews: similarInsights,
   });
 
-  // AI呼び出し
+  // AI呼び出し（設計書は品質最重要のためgpt-4oを明示指定）
   const result = await createChatCompletion({
     messages: [
       { role: "system", content: prompt },
       {
         role: "user",
         content: `${shopData.name}の${shopData.owner_name}さんへのインタビュー設計書を作成してください。
-質問リスト20問と、インタビュアー向けのガイドを生成してください。`,
+
+以下を必ず含めてください：
+- interview_overview: 戦略・ストーリー仮説・店主のコミュニケーションスタイル
+- interviewer_guide: 準備チェックリスト・挨拶テンプレート・沈黙対処法・トラブル対応（全項目必須）
+- questions: 25問（各問にfollow_up_scenarios最低2パターン、what_to_listen_for、transition_to_next）
+- post_interview: インタビュー直後のアクション・品質チェック・お礼テンプレート
+
+事前調査で見つかったこの店固有の情報を最大限質問に反映してください。
+一般的な飲食店向けの質問は全体の30%以下に抑えてください。`,
       },
     ],
-    purpose: "generation",
-    temperature: 0.6,
+    model: "gpt-4o",
+    temperature: 0.5,
+    maxTokens: 12288,
   });
 
   logApiUsage({
@@ -123,18 +132,36 @@ export async function generateInterviewDesign(
     designData = { raw_response: result.content };
   }
 
-  // DB保存
+  // interview_overview からフィールドを抽出
+  const overview = designData.interview_overview as Record<string, unknown> | undefined;
+  const strategyText = overview?.strategy ?? designData.interview_strategy ?? null;
+  const focusAreas = overview?.focus_areas ?? designData.focus_areas ?? [];
+  const durationMin = overview?.estimated_duration_minutes ?? designData.estimated_duration_minutes ?? 40;
+
+  // interviewer_guide と post_interview を合わせてinterviewer_notesに保存
+  const fullGuideData = {
+    interview_overview: overview ?? null,
+    interviewer_guide: designData.interviewer_guide ?? null,
+    post_interview: designData.post_interview ?? null,
+  };
+
+  // DB保存（interview_strategyはtext、focus_areasはtext[]、interviewer_notesにガイド全体をJSON文字列で保存）
+  const insertPayload: Record<string, unknown> = {
+    shop_id: shopId,
+    pre_research_id: researchId ?? null,
+    questions: designData.questions ?? [],
+    interview_strategy: typeof strategyText === "string" ? strategyText : JSON.stringify(strategyText),
+    focus_areas: Array.isArray(focusAreas)
+      ? focusAreas.map((f: unknown) => (typeof f === "string" ? f : (f as Record<string, unknown>)?.area ?? JSON.stringify(f)))
+      : [],
+    estimated_duration_minutes: typeof durationMin === "number" ? durationMin : 40,
+    interviewer_notes: JSON.stringify(fullGuideData),
+    status: "draft",
+  };
+
   const { data: designDoc, error: insertError } = await supabase
     .from("interview_design_docs")
-    .insert({
-      shop_id: shopId,
-      pre_research_id: researchId ?? null,
-      questions: designData.questions ?? [],
-      interview_strategy: designData.interview_strategy ?? null,
-      focus_areas: designData.focus_areas ?? [],
-      estimated_duration_minutes: designData.estimated_duration_minutes ?? 30,
-      status: "draft",
-    })
+    .insert(insertPayload)
     .select("id")
     .single();
 

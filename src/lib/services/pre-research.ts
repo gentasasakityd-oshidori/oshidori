@@ -26,7 +26,7 @@ export async function runPreResearch(
   // 店舗情報取得（申請情報との照合用に追加フィールドも取得）
   const { data: shop, error: shopError } = await supabase
     .from("shops")
-    .select("name, category, area, tabelog_url, gmb_url, website_url, instagram_url, owner_name, phone, address_prefecture, address_city, address_street, address_building")
+    .select("name, category, area, tabelog_url, gmb_url, website_url, facebook_url, owner_name, phone, address_prefecture, address_city, address_street, address_building")
     .eq("id", shopId)
     .single();
 
@@ -41,7 +41,7 @@ export async function runPreResearch(
     tabelog_url: string | null;
     gmb_url: string | null;
     website_url: string | null;
-    instagram_url: string | null;
+    facebook_url: string | null;
     owner_name: string | null;
     phone: string | null;
     address_prefecture: string | null;
@@ -72,7 +72,7 @@ export async function runPreResearch(
     category: shopData.category,
     area: shopData.area,
     existingData: {
-      instagramUrl: shopData.instagram_url ?? undefined,
+      facebookUrl: shopData.facebook_url ?? undefined,
       tabelogUrl: shopData.tabelog_url ?? undefined,
       gmbUrl: shopData.gmb_url ?? undefined,
       websiteUrl: shopData.website_url ?? undefined,
@@ -89,18 +89,29 @@ export async function runPreResearch(
     },
   });
 
-  // AI呼び出し
+  // AI呼び出し（事前調査は品質最重要のためgpt-4oを明示指定）
   const result = await createChatCompletion({
     messages: [
       { role: "system", content: prompt },
       {
         role: "user",
         content: `${shopData.name}（${shopData.area}の${shopData.category}）の事前調査を実施してください。
-公開情報から得られる範囲で、店主の人柄・こだわり・エピソードの仮説を生成してください。`,
+
+以下を必ず含めてください：
+- personality_hypothesis: 最低3件、各件に具体的な根拠（投稿日・口コミ原文引用等）とinterview_verification
+- kodawari_hypothesis: 最低3件、各件にstory_potentialとinterview_angle
+- episode_hypothesis: 最低3件、各件に具体的な質問案3つ
+- customer_voice_analysis: 口コミの定量分析（件数・テーマ別頻度・代表的引用）
+- menu_analysis: 看板メニュー最低2品の詳細分析
+- interview_strategy: 推奨アングル3つ以上、店主のコミュニケーションスタイル推測、caution_topics
+- phase_hypotheses: インタビュー7フェーズ（icebreak/origin/kodawari/signature_dish/regulars/community/future）それぞれに具体的な仮説・話題・質問案を準備
+
+「薄い」「一般的」な仮説は禁止。この店にしかない具体的な事実に基づく仮説を生成してください。`,
       },
     ],
-    purpose: "generation",
-    temperature: 0.5,
+    model: "gpt-4o",
+    temperature: 0.4,
+    maxTokens: 12288,
   });
 
   logApiUsage({
@@ -134,6 +145,15 @@ export async function runPreResearch(
     completed_at: new Date().toISOString(),
   };
 
+  // v2フィールドをDBに保存（カラム未追加でもエラーにならないよう後から別途更新）
+  const v2Fields: Record<string, unknown> = {};
+  if (researchData.shop_profile) v2Fields.shop_profile = researchData.shop_profile;
+  if (researchData.customer_voice_analysis) v2Fields.customer_voice_analysis = researchData.customer_voice_analysis;
+  if (researchData.menu_analysis) v2Fields.menu_analysis = researchData.menu_analysis;
+  if (researchData.competitive_context) v2Fields.competitive_context = researchData.competitive_context;
+  if (researchData.interview_strategy) v2Fields.interview_strategy = researchData.interview_strategy;
+  if (researchData.phase_hypotheses) v2Fields.phase_hypotheses = researchData.phase_hypotheses;
+
   // verification_reportは別途更新を試みる（カラム未追加の場合に本体更新が失敗しないよう分離）
   const { error: updateError } = await supabase
     .from("pre_research_reports")
@@ -153,6 +173,17 @@ export async function runPreResearch(
       .eq("id", reportId);
     if (vrError) {
       console.warn(`[PreResearch] verification_report update skipped:`, vrError.message);
+    }
+  }
+
+  // v2フィールドの更新（カラム未追加でも続行）
+  if (Object.keys(v2Fields).length > 0) {
+    const { error: v2Error } = await supabase
+      .from("pre_research_reports")
+      .update(v2Fields)
+      .eq("id", reportId);
+    if (v2Error) {
+      console.warn(`[PreResearch] v2 fields update skipped:`, v2Error.message);
     }
   }
 

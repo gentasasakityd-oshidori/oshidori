@@ -33,18 +33,19 @@ export async function POST(request: Request) {
 
 {
   "update": {
-    "content": "近況更新テキスト（280文字以内、温かみのある文体で）",
+    "content": "近況更新テキスト（280文字以内、温かみのある文体で。お店の雰囲気や想いが伝わるように）",
     "should_post": true
   },
   "supply_flash": {
     "item_name": "食材名や限定メニュー名（60文字以内）",
-    "description": "詳細説明（280文字以内）",
+    "description": "詳細説明（280文字以内、食欲をそそる表現で）",
     "supply_type": "limited|seasonal|special|restock",
     "should_post": true/false（該当する話題がなければfalse）
   },
   "sns": {
-    "instagram": "Instagram向け投稿文（ハッシュタグ含む、280文字以内）",
-    "x": "X(Twitter)向け投稿文（140文字以内）"
+    "instagram": "Instagram向け投稿文（ハッシュタグ5個以内含む、280文字以内。ビジュアル重視の表現で）",
+    "x": "X(Twitter)向け投稿文（140文字以内。簡潔で目を引く表現）",
+    "facebook": "Facebook向け投稿文（400文字以内。丁寧な文体で、お店の想いやこだわりを伝える長めの文章）"
   }
 }`;
 
@@ -77,6 +78,7 @@ export async function POST(request: Request) {
       flash_item: generated.supply_flash?.item_name || null,
       sns_instagram: generated.sns?.instagram || null,
       sns_x: generated.sns?.x || null,
+      sns_facebook: generated.sns?.facebook || null,
     };
 
     // 近況更新を保存
