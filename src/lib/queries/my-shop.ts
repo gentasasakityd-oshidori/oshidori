@@ -1,21 +1,34 @@
 /**
  * 現在ログイン中のユーザーが所有する店舗を取得するヘルパー
  *
- * shops.owner_id === auth.uid() で店舗を検索する。
+ * shops.owner_id === userId で店舗を検索する。
+ * RLSの影響を回避するため、サービスロールクライアントを使用。
  * 全ダッシュボード API で共通利用する。
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { createClient } from "@supabase/supabase-js";
+
+/** RLSバイパス用サービスロールクライアント */
+function getServiceClient(): SupabaseClient {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { autoRefreshToken: false, persistSession: false } },
+  );
+}
 
 /**
  * ログインユーザーの店舗IDを取得
+ * サービスロールでRLSをバイパスし、owner_idで確実に検索する
  * @returns shop_id (string) or null
  */
 export async function getMyShopId(
-  supabase: SupabaseClient,
+  _supabase: SupabaseClient,
   userId: string
 ): Promise<string | null> {
-  const { data, error } = await supabase
+  const admin = getServiceClient();
+  const { data, error } = await admin
     .from("shops")
     .select("id")
     .eq("owner_id", userId)
@@ -32,13 +45,15 @@ export async function getMyShopId(
 
 /**
  * ログインユーザーが指定された shop_id を所有しているか検証
+ * サービスロールでRLSをバイパスし、確実に検証する
  */
 export async function verifyShopOwnership(
-  supabase: SupabaseClient,
+  _supabase: SupabaseClient,
   userId: string,
   shopId: string
 ): Promise<boolean> {
-  const { data } = await supabase
+  const admin = getServiceClient();
+  const { data } = await admin
     .from("shops")
     .select("id")
     .eq("id", shopId)

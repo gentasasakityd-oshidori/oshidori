@@ -1,5 +1,15 @@
 import { NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+
+/** RLSバイパス用サービスロールクライアント */
+function createAdminClient() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { autoRefreshToken: false, persistSession: false } },
+  );
+}
 
 /** GET: ダッシュボードホームのKPI・最近の共感・タグ分布・セットアップ状態 */
 export async function GET() {
@@ -17,13 +27,14 @@ export async function GET() {
       );
     }
 
-    // owner_id でユーザーの店舗を検索
-    const { data: shop } = await supabase
+    // owner_id でユーザーの店舗を検索（RLSバイパスで確実に取得）
+    const adminDb = createAdminClient();
+    const { data: shop } = await adminDb
       .from("shops")
       .select("id, name, owner_name, onboarding_phase")
       .eq("owner_id", user.id)
       .limit(1)
-      .single();
+      .maybeSingle();
 
     const shopId = shop ? (shop as { id: string }).id : null;
 
@@ -267,11 +278,13 @@ export async function GET() {
       photo: hasPhotos,
     };
 
+    const typedShop = shop as { id: string; name: string; owner_name: string; onboarding_phase: string };
     return NextResponse.json({
       shop: {
-        name: (shop as { name: string; owner_name: string; onboarding_phase: string }).name,
-        owner_name: (shop as { name: string; owner_name: string; onboarding_phase: string }).owner_name,
-        onboarding_phase: (shop as { name: string; owner_name: string; onboarding_phase: string }).onboarding_phase,
+        id: typedShop.id,
+        name: typedShop.name,
+        owner_name: typedShop.owner_name,
+        onboarding_phase: typedShop.onboarding_phase,
       },
       kpi: {
         oshi_count: oshiCount,

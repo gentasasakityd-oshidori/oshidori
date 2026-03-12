@@ -47,7 +47,7 @@ type CMProposalData = {
 };
 
 type DashboardData = {
-  shop: { name: string; owner_name: string; id?: string; onboarding_phase?: string } | null;
+  shop: { id: string; name: string; owner_name: string; onboarding_phase?: string } | null;
   kpi: {
     oshi_count: number;
     empathy_count: number;
